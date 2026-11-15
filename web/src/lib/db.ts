@@ -1381,3 +1381,119 @@ export async function registerNfcTag(artisanId: number, productId: number, tagId
   const p = store!.products.find((x) => x.id === productId && x.artisan_id === artisanId);
   if (p) { p.nfc_tag_id = tagId; p.nfc_tag_status = 'active'; }
 }
+
+export async function adminUpdateProduct(
+  id: number,
+  p: { name?: string; price?: number; category?: string | null; status?: 'active' | 'inactive' }
+): Promise<{ ok: boolean; message?: string }> {
+  invalidate('products:active:default');
+  invalidate(`product:${id}`);
+  const touchesDetails = p.name !== undefined || p.price !== undefined || p.category !== undefined;
+  const LOCKED = 'This product already has orders, so only its status can be changed.';
+
+  if (usingPostgres) {
+    if (touchesDetails) {
+      const used = await sql`select count(*)::int as n from order_items where product_id = ${id}`;
+      if (num((used[0] as Record<string, unknown>).n) > 0) return { ok: false, message: LOCKED };
+    }
+    const rows = await sql`update products set
+        name = coalesce(${p.name ?? null}, name),
+        price = coalesce(${p.price ?? null}, price),
+        category = ${p.category === undefined ? sql`category` : p.category},
+        status = coalesce(${p.status ?? null}, status)
+      where id = ${id} returning id`;
+    return rows.length ? { ok: true } : { ok: false, message: 'Product not found.' };
+  }
+
+  const prod = store!.products.find((x) => x.id === id);
+  if (!prod) return { ok: false, message: 'Product not found.' };
+  if (touchesDetails && store!.order_items.some((x) => x.product_id === id)) return { ok: false, message: LOCKED };
+  if (p.name !== undefined) prod.name = p.name;
+  if (p.price !== undefined) prod.price = p.price;
+  if (p.category !== undefined) prod.category = p.category;
+  if (p.status !== undefined) prod.status = p.status;
+  return { ok: true };
+}
+
+/** Hard delete. Refuses when the product has order history. */
+export async function adminDeleteProduct(id: number): Promise<{ ok: boolean; message?: string }> {
+  invalidate('products:active:default');
+  invalidate(`product:${id}`);
+  invalidate('admin:stats');
+  if (usingPostgres) {
+    const used = await sql`select count(*)::int as n from order_items where product_id = ${id}`;
+    if (num((used[0] as Record<string, unknown>).n) > 0) {
+      return {
+        ok: false,
+        message: 'This product is part of existing orders and cannot be deleted. Set it to Inactive instead.',
+      };
+    }
+    try {
+      await sql`delete from cart_items where product_id = ${id}`;
+      await sql`update chat_conversations set product_id = null where product_id = ${id}`;
+      const rows = await sql`delete from products where id = ${id} returning id`;
+      return rows.length ? { ok: true } : { ok: false, message: 'Product not found.' };
+    } catch (e) {
+      return { ok: false, message: 'Could not delete: other records still reference this product.' };
+    }
+  }
+  if (store!.order_items.some((x) => x.product_id === id)) {
+    return { ok: false, message: 'This product is part of existing orders and cannot be deleted. Set it to Inactive instead.' };
+  }
+  const before = store!.products.length;
+  store!.products = store!.products.filter((x) => x.id !== id);
+  store!.cart_items = store!.cart_items.filter((x) => x.product_id !== id);
+  store!.chat_conversations.forEach((c) => { if (c.product_id === id) c.product_id = null; });
+  return store!.products.length < before ? { ok: true } : { ok: false, message: 'Product not found.' };
+}
+
+export interface ProductOrderSummary {
+  total: number;
+  active: number;
+  recent: Array<{ order_id: number; customer_name: string | null; quantity: number; status: string; purchase_type: string; created_at: string }>;
+}
+
+export async function getProductOrderSummary(productId: number): Promise<ProductOrderSummary> {
+  if (usingPostgres) {
+    const rows = await sql`
+      select oi.order_id, oi.quantity, oi.status, oi.purchase_type, o.created_at, u.name as customer_name
+      from order_items oi
+      join orders o on o.id = oi.order_id
+      left join users u on u.id = o.customer_id
+      where oi.product_id = ${productId}
+      order by o.created_at desc`;
+    const list = rows as unknown as Record<string, unknown>[];
+    return {
+      total: list.length,
+      active: list.filter((r) => !['cancelled', 'delivered', 'received', 'attended', 'no_show'].includes(String(r.status))).length,
+      recent: list.slice(0, 5).map((r) => ({
+        order_id: num(r.order_id),
+        customer_name: (r.customer_name as string) ?? null,
+        quantity: num(r.quantity),
+        status: String(r.status ?? 'pending'),
+        purchase_type: String(r.purchase_type),
+        created_at: tsString(r.created_at) ?? new Date().toISOString(),
+      })),
+    };
+  }
+  const items = store!.order_items.filter((x) => x.product_id === productId);
+  const mapped = items
+    .map((x) => {
+      const o = store!.orders.find((oo) => oo.id === x.order_id);
+      const u = o ? store!.users.find((uu) => uu.id === o.customer_id) : undefined;
+      return {
+        order_id: x.order_id,
+        customer_name: u?.name ?? null,
+        quantity: x.quantity,
+        status: x.status ?? 'pending',
+        purchase_type: x.purchase_type,
+        created_at: o?.created_at ?? new Date().toISOString(),
+      };
+    })
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return {
+    total: mapped.length,
+    active: mapped.filter((r) => !['cancelled', 'delivered', 'received', 'attended', 'no_show'].includes(r.status)).length,
+    recent: mapped.slice(0, 5),
+  };
+}

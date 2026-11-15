@@ -145,30 +145,7 @@ const workshopReviews = reviews.filter((r) => r.purchase_type === 'workshop');
           </div>
         </section>
 
-{/* ===== WORKSHOP VENUE MAP ===== */}
-{product.has_tutorial && (
-  <section
-    id="workshop-map"
-    className="mt-6 scroll-mt-24 rounded-xl border border-[#D6D0C9] bg-white p-4 shadow-sm"
-  >
-    <h2 className="border-b border-[#D6D0C9] pb-1 font-serif text-base font-bold text-[#3D3028]">
-      Workshop Venue
-    </h2>
-    {(product.tutorial_location || product.tutorial_dates?.[0]?.location) && (
-      <p className="mt-2 text-xs text-[#71675F]">
-        📍 {product.tutorial_location || product.tutorial_dates?.[0]?.location}
-      </p>
-    )}
-    <div className="mt-3">
-      <ExperienceMap
-        lat={lat}
-        lng={lng}
-        locationName={product.tutorial_location || product.tutorial_dates?.[0]?.location}
-        artisanPhone={artisan?.phone}
-      />
-    </div>
-  </section>
-)}
+
 
 
         {/* ===== BOOKING / ORDER PANEL (logic unchanged) ===== */}
