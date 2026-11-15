@@ -12,11 +12,13 @@ const QUICK_SEARCHES = ['Basket', 'Woven Textile', 'Beadwork', 'Woodcarving', 'A
 export default async function BrowsePage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; q?: string }>;
+  searchParams: Promise<{ category?: string; q?: string; workshop?: string }>;
 }) {
   const params = await searchParams;
+  const workshopOnly = params.workshop === '1';
+
   const [products, categories] = await Promise.all([
-    listActiveProducts({ category: params.category, search: params.q }),
+    listActiveProducts({ category: params.category, search: params.q, workshopOnly }),
     listCategories('product'),
   ]);
 
@@ -38,11 +40,13 @@ export default async function BrowsePage({
           <div className="flex items-center gap-2 text-xs text-stone-500 mb-1">
             <Link href="/" className="hover:text-crimson-700">Home</Link>
             <span>/</span>
-            <span className="font-semibold text-charcoal-900">Discover the Craft</span>
+            <span className="font-semibold text-charcoal-900">
+              {workshopOnly ? 'Living Cultural Workshops' : 'Discover the Craft'}
+            </span>
           </div>
 
           <h1 className="font-sculpted text-3xl sm:text-4xl font-bold text-charcoal-900">
-            Discover the Craft
+            {workshopOnly ? 'Living Cultural Workshops' : 'Discover the Craft'}
           </h1>
           <p className="mt-1.5 text-sm text-stone-600 max-w-2xl">
             Explore authentic handwoven textiles, traditional woodcarvings, basketry, and living workshop experiences from Agusan del Sur master craftspeople.
@@ -52,6 +56,7 @@ export default async function BrowsePage({
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-abaca-200/90 bg-white/90 p-4 shadow-2xs">
             <form className="flex flex-wrap items-center gap-2.5" action="/customer/browse">
               {activeQ ? <input type="hidden" name="q" value={activeQ} /> : null}
+              {workshopOnly ? <input type="hidden" name="workshop" value="1" /> : null}
               <label htmlFor="cat-select" className="text-xs font-bold uppercase tracking-wider text-ochre-700">
                 Category:
               </label>
@@ -75,7 +80,7 @@ export default async function BrowsePage({
                 Apply
               </button>
 
-              {(activeQ || activeCategory) && (
+              {(activeQ || activeCategory || workshopOnly) && (
                 <Link
                   href="/customer/browse"
                   className="inline-flex h-9 items-center rounded-xl border border-stone-200 bg-stone-50 px-3 text-xs font-medium text-stone-600 transition hover:bg-stone-100"
@@ -87,7 +92,8 @@ export default async function BrowsePage({
 
             {products.length > 0 && (
               <div className="text-xs font-medium text-stone-500">
-                Showing <span className="font-bold text-charcoal-900">{products.length}</span> Authentic Crafts
+                Showing <span className="font-bold text-charcoal-900">{products.length}</span>{' '}
+                {workshopOnly ? 'Workshop Crafts' : 'Authentic Crafts'}
               </div>
             )}
           </div>
@@ -100,7 +106,7 @@ export default async function BrowsePage({
             {visibleCategories.map((c) => (
               <Link
                 key={c.id}
-                href={`/customer/browse?category=${encodeURIComponent(c.name)}`}
+                href={`/customer/browse?category=${encodeURIComponent(c.name)}${workshopOnly ? '&workshop=1' : ''}`}
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition ${activeCategory === c.name
                   ? 'border-crimson-700 bg-crimson-700 text-white'
                   : 'border-abaca-300 bg-white text-charcoal-800 hover:border-ochre-400 hover:bg-ochre-50'

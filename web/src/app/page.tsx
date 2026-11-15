@@ -3,18 +3,28 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import WeaveDivider from '@/components/WeaveDivider';
-import { listActiveProducts, getSettings, listCategories } from '@/lib/db';
+import FeaturedCarousel from './FeaturedCarousel';  
+import { listActiveProducts, getSettings, listCategories, getProductRatingStats } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const [products, settings, categories] = await Promise.all([
-    listActiveProducts(),
-    getSettings(),
-    listCategories('product'),
-  ]);
-  const featured = products.slice(0, 8);
-  const workshopCrafts = products.filter((p) => p.has_tutorial).slice(0, 3);
+  const [products, settings, categories, ratings] = await Promise.all([
+  listActiveProducts(),
+  getSettings(),
+  listCategories('product'),
+  getProductRatingStats(),
+]);
+
+// Highest average rating first; ties go to the product with more reviews
+const featured = [...products]
+  .sort((a, b) => {
+    const ra = ratings[a.id];
+    const rb = ratings[b.id];
+    return (rb?.avg ?? 0) - (ra?.avg ?? 0) || (rb?.count ?? 0) - (ra?.count ?? 0);
+  })
+  .slice(0, 12);
+const workshopCrafts = products.filter((p) => p.has_tutorial).slice(0, 3);
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
@@ -133,14 +143,21 @@ export default async function HomePage() {
               </h2>
             </div>
             <Link href="/customer/browse" className="text-xs font-semibold text-crimson-700 hover:underline mb-1">
-              Browse Full Catalog →
+              Browse Crafts →
             </Link>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {featured.map((p, i) => (
-              <ProductCard key={p.id} product={p} priority={i < 4} />
-            ))}
+                    <div className="mt-8">
+            <FeaturedCarousel>
+              {featured.map((p, i) => (
+                <div
+                  key={p.id}
+                  className="w-[78%] shrink-0 snap-start sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-4.5rem)/4)]"
+                >
+                  <ProductCard product={p} priority={i < 4} />
+                </div>
+              ))}
+            </FeaturedCarousel>
           </div>
         </section>
 
@@ -150,7 +167,7 @@ export default async function HomePage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-ochre-200/80 pb-6">
               <div>
                 <span className="badge bg-charcoal-900 text-ochre-300 border border-ochre-500 font-bold text-xs py-1 px-3">
-                  🌿 Living Cultural Workshops
+                  Living Cultural Workshops
                 </span>
                 <h2 className="mt-2 font-sculpted text-2xl sm:text-3xl font-bold text-charcoal-900">
                   Learn Directly from Indigenous Masters
@@ -159,8 +176,8 @@ export default async function HomePage() {
                   Participate in live hands-on tutorials. Weave, carve, and preserve ancestral skills guided step-by-step by master artisans.
                 </p>
               </div>
-              <Link href="/customer/browse" className="btn bg-crimson-600 text-white hover:bg-crimson-700 font-semibold text-xs px-5 py-2.5 shrink-0 shadow-xs">
-                Explore All Workshops →
+              <Link href="/customer/browse?workshop=1" className="btn bg-crimson-600 text-white hover:bg-crimson-700 font-semibold text-xs px-5 py-2.5 shrink-0 shadow-xs">
+                  Explore All Workshops →
               </Link>
             </div>
 

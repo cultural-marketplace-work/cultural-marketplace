@@ -293,25 +293,24 @@ function mapProduct(r: Record<string, unknown>): Product {
   };
 }
 
-export async function listActiveProducts(opts?: { category?: string; search?: string; artisanId?: number }): Promise<Product[]> {
-  const isDefault = !opts?.category && !opts?.search && !opts?.artisanId;
+
+export async function listActiveProducts(opts?: { category?: string; search?: string; artisanId?: number; workshopOnly?: boolean }): Promise<Product[]> {
+  const isDefault = !opts?.category && !opts?.search && !opts?.artisanId && !opts?.workshopOnly;
   if (isDefault) {
     return cached('products:active:default', () => queryActiveProducts(opts), 25_000);
   }
   return queryActiveProducts(opts);
 }
 
-async function queryActiveProducts(opts?: { category?: string; search?: string; artisanId?: number }): Promise<Product[]> {
+async function queryActiveProducts(opts?: { category?: string; search?: string; artisanId?: number; workshopOnly?: boolean }): Promise<Product[]> {
   if (usingPostgres) {
-    // Verification gating (study Objective 2): only products of APPROVED
-    // artisans are publicly visible — pending/rejected/suspended artisans'
-    // products are hidden from browse everywhere.
     const rows = await sql`
       select p.* from products p
       join artisans a on a.id = p.artisan_id
       where p.status = 'active' and a.verification_status = 'approved'
         and (${opts?.category ?? null}::text is null or p.category = ${opts?.category ?? null})
         and (${opts?.artisanId ?? null}::bigint is null or p.artisan_id = ${opts?.artisanId ?? null})
+        and (${opts?.workshopOnly ?? false}::boolean = false or p.has_tutorial = true)
         and (${opts?.search ?? null}::text is null or p.name ilike '%' || ${opts?.search ?? null} || '%' or p.description ilike '%' || ${opts?.search ?? null} || '%')
       order by p.created_at desc limit 100`;
     return (rows as unknown as Record<string, unknown>[]).map(mapProduct);
@@ -320,6 +319,7 @@ async function queryActiveProducts(opts?: { category?: string; search?: string; 
   let list = store!.products.filter((p) => p.status === 'active' && approved.has(p.artisan_id));
   if (opts?.category) list = list.filter((p) => p.category === opts.category);
   if (opts?.artisanId) list = list.filter((p) => p.artisan_id === opts.artisanId);
+  if (opts?.workshopOnly) list = list.filter((p) => p.has_tutorial);
   if (opts?.search) {
     const s = opts.search.toLowerCase();
     list = list.filter((p) => p.name.toLowerCase().includes(s) || (p.description ?? '').toLowerCase().includes(s));
@@ -1496,4 +1496,29 @@ export async function getProductOrderSummary(productId: number): Promise<Product
     active: mapped.filter((r) => !['cancelled', 'delivered', 'received', 'attended', 'no_show'].includes(r.status)).length,
     recent: mapped.slice(0, 5),
   };
+}
+
+
+export async function getProductRatingStats(): Promise<Record<number, { avg: number; count: number }>> {
+  const out: Record<number, { avg: number; count: number }> = {};
+  if (usingPostgres) {
+    const rows = await sql`
+      select product_id, avg(review_rating)::float as avg, count(*)::int as count
+      from order_items
+      where review_rating is not null
+      group by product_id`;
+    for (const r of rows as unknown as Record<string, unknown>[]) {
+      out[num(r.product_id)] = { avg: num(r.avg), count: num(r.count) };
+    }
+    return out;
+  }
+  const sums: Record<number, { total: number; count: number }> = {};
+  for (const x of store!.order_items) {
+    if (x.review_rating == null) continue;
+    const s = (sums[x.product_id] ??= { total: 0, count: 0 });
+    s.total += x.review_rating;
+    s.count += 1;
+  }
+  for (const [id, s] of Object.entries(sums)) out[Number(id)] = { avg: s.total / s.count, count: s.count };
+  return out;
 }
