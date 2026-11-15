@@ -3,7 +3,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import WeaveDivider from '@/components/WeaveDivider';
-import { listActiveProducts, listCategories } from '@/lib/db';
+import { listActiveProducts, listCategories, listApprovedArtisans  } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,14 +17,15 @@ export default async function BrowsePage({
   const params = await searchParams;
   const workshopOnly = params.workshop === '1';
 
-  const [products, categories] = await Promise.all([
+  const [products, categories, artisans] = await Promise.all([
     listActiveProducts({ category: params.category, search: params.q, workshopOnly }),
     listCategories('product'),
+    listApprovedArtisans(),
   ]);
 
   const activeCategory = params.category;
   const activeQ = params.q;
-
+const artisanById = new Map(artisans.map((a) => [a.id, a]));  
   const visibleCategories = categories.filter(
     (c) => c.name.toLowerCase() !== 'other'
   );
@@ -125,11 +126,82 @@ export default async function BrowsePage({
         </div>
 
         {/* Product Grid */}
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {products.map((p, i) => (
-            <ProductCard key={p.id} product={p} priority={i < 4} />
-          ))}
+{workshopOnly ? (
+  <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    {products.map((w) => {
+      const artisan = artisanById.get(w.artisan_id);
+      return (
+        <div
+          key={w.id}
+          className="flex flex-col justify-between overflow-hidden rounded-2xl border border-abaca-200 bg-white shadow-2xs transition hover:border-ochre-400"
+        >
+          {w.image_path && (
+            <Link href={`/customer/browse/${w.id}`}>
+              <img src={w.image_path} alt={w.name} className="h-40 w-full object-cover" />
+            </Link>
+          )}
+
+          <div className="flex flex-1 flex-col justify-between p-5">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ochre-800">
+                Hands-on Experience
+              </span>
+              <h3 className="mt-1 line-clamp-1 font-sculpted text-base font-bold text-charcoal-900">
+                {w.tutorial_title || w.name}
+              </h3>
+              <p className="mt-1 line-clamp-2 text-xs text-stone-500">
+                {w.tutorial_description || w.description}
+              </p>
+              {w.tutorial_location && (
+                <p className="mt-2 text-[11px] text-stone-400">📍 {w.tutorial_location}</p>
+              )}
+
+              {artisan && (
+                <Link
+                  href={`/artisans/${artisan.id}`}
+                  className="mt-3 flex items-center gap-2.5 rounded-xl border border-abaca-100 bg-canvas/50 p-2 transition hover:border-ochre-300"
+                >
+                  {artisan.profile_picture ? (
+                    <img
+                      src={artisan.profile_picture}
+                      alt={artisan.name}
+                      className="h-9 w-9 shrink-0 rounded-full border border-[#D8C8B5] object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8C8B5] bg-white text-sm font-bold text-[#8B0000]">
+                      {artisan.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 leading-tight">
+                    <p className="text-[9px] text-stone-500">Taught by</p>
+                    <p className="truncate text-xs font-bold text-charcoal-900">{artisan.name}</p>
+                  </div>
+                </Link>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-abaca-100 pt-3">
+              <span className="font-mono text-xs font-bold text-charcoal-900">
+                {w.tutorial_fee_type === 'free'
+                  ? 'FREE Workshop'
+                  : `₱${Number(w.tutorial_price ?? w.price).toFixed(2)} / attendee`}
+              </span>
+              <Link href={`/customer/browse/${w.id}`} className="text-xs font-semibold text-crimson-700 hover:underline">
+                Reserve Pass →
+              </Link>
+            </div>
+          </div>
         </div>
+      );
+    })}
+  </div>
+) : (
+  <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    {products.map((p, i) => (
+      <ProductCard key={p.id} product={p} priority={i < 4} />
+    ))}
+  </div>
+)}
 
         {/* Empty State */}
         {products.length === 0 && (
