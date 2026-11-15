@@ -2,7 +2,6 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
-import WeaveDivider from '@/components/WeaveDivider';
 import FeaturedCarousel from './FeaturedCarousel';  
 import { listActiveProducts, getSettings, listCategories, getProductRatingStats, listApprovedArtisans } from '@/lib/db';
 
@@ -34,11 +33,11 @@ const artisanById = new Map(artisans.map((a) => [a.id, a]));
 
       {/* Hero Section */}
 <section
-  className="relative isolate overflow-hidden border-b border-abaca-200/80 bg-[#F5EBDD]"
+  className="relative isolate flex min-h-[calc(100dvh-11rem)] flex-col overflow-hidden border-b border-abaca-200/80 bg-[#F5EBDD] md:min-h-[calc(100dvh-8rem)] xl:min-h-[calc(100dvh-5rem)]"
   style={{
     backgroundImage: "url('/images/homepage-background.png')",
     backgroundSize: 'cover',
-    backgroundPosition: 'center 70%',
+    backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
   }}
 >
@@ -48,13 +47,9 @@ const artisanById = new Map(artisans.map((a) => [a.id, a]));
     aria-hidden="true"
   />
 
-  {/* Top decorative weave border */}
-  <div className="relative z-20">
-    <WeaveDivider pattern="kalinga" />
-  </div>
 
   {/* Hero Content */}
-  <div className="relative z-10 mx-auto flex min-h-[410px] max-w-6xl items-center px-5 py-14 sm:min-h-[430px] sm:px-8 sm:py-16">
+  <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center px-5 py-14 sm:px-8 sm:py-16">
     <div className="max-w-[620px] text-left">
 
       <h1 className="font-sculpted max-w-[600px] text-4xl font-extrabold leading-[1.02] tracking-tight text-[#990000] drop-shadow-[0_1px_1px_rgba(255,255,255,0.35)] sm:text-5xl md:text-[3.4rem]">
@@ -96,10 +91,6 @@ const artisanById = new Map(artisans.map((a) => [a.id, a]));
     </div>
   </div>
 
-  {/* Bottom decorative weave border */}
-  <div className="relative z-20">
-    <WeaveDivider pattern="kalinga" />
-  </div>
 </section>
       
 

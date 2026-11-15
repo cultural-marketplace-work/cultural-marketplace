@@ -46,7 +46,6 @@ export default async function LoginPage() {
           </div>
         </Link>
 
-        {/* Full-width weave band under the header */}
         <WeaveDivider pattern="kalinga" />
 
         {/* Body */}

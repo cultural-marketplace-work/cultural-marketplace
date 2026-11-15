@@ -3,7 +3,6 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
-import WeaveDivider from '@/components/WeaveDivider';
 import { getArtisan, listActiveProducts } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -30,8 +29,6 @@ export default async function ArtisanProfilePage({ params }: { params: Promise<{
 
         {/* Master Artisan Atelier Header Card */}
         <div className="rounded-3xl border border-abaca-200/90 bg-white/95 p-6 sm:p-10 shadow-xs relative overflow-hidden">
-          <WeaveDivider pattern="kalinga" className="absolute top-0 left-0 right-0" />
-
           <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center pt-2">
             {artisan.profile_picture ? (
               <img

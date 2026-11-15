@@ -25,7 +25,7 @@ export default function WeaveDivider({
     <div
       role="presentation"
       aria-hidden="true"
-      className={`weave-divider ${subtle ? 'opacity-40' : 'opacity-85'} ${className}`}
+      className={`weave-divider ${subtle ? 'opacity-40' : 'opacity-100'} ${className}`}
     />
   );
 }

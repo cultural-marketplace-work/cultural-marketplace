@@ -1,12 +1,10 @@
 
 import Link from 'next/link';
-import WeaveDivider from './WeaveDivider';
 
 export default function Footer() {
   return (
     <footer className="mt-8 border-t border-[#DCC5A8] bg-[#F5EBDD] text-[#211B17]">
-      {/* Top Weave Border Accent */}
-      <WeaveDivider pattern="kalinga" className="opacity-75" />
+     
 
       <div className="mx-auto max-w-6xl px-4 py-4 sm:py-5">
         <div className="grid grid-cols-1 items-start gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-[1.45fr_1fr_1fr_1.15fr]">

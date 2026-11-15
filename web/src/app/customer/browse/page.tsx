@@ -2,7 +2,6 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
-import WeaveDivider from '@/components/WeaveDivider';
 import { listActiveProducts, listCategories, listApprovedArtisans  } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +32,6 @@ const artisanById = new Map(artisans.map((a) => [a.id, a]));
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
       <Header />
-      <WeaveDivider pattern="kalinga" />
 
       <main className="mx-auto max-w-6xl px-4 py-10 flex-1 w-full">
         {/* Page Header */}

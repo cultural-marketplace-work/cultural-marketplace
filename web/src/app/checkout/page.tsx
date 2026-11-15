@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import WeaveDivider from '@/components/WeaveDivider';
 import { getSession } from '@/lib/auth';
 import { getCart, getUserPhone } from '@/lib/db';
 import { listAddresses } from '@/lib/adminDb';
@@ -73,11 +72,6 @@ export default async function CheckoutPage({
     return (
     <div className="min-h-screen flex flex-col bg-canvas">
       <Header />
-
-      {/* Top decorative weave border */}
-      <div className="relative z-20">
-        <WeaveDivider pattern="kalinga" />
-      </div>
 
       <main className="mx-auto max-w-4xl px-4 py-8 flex-1 w-full">
         {/* Breadcrumb Navigation */}

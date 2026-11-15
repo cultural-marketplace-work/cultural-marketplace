@@ -1,12 +1,12 @@
 /**
  * AuthBackdrop
  * Decorative, non-interactive background for the auth pages.
- * Inspired by woven diamond / zigzag motifs of Agusan del Sur
+ * Inspired by woven diamond motifs of Agusan del Sur
  * Indigenous textiles. Place it as the FIRST child of a `relative
  * overflow-hidden` wrapper; it fills the wrapper and sits behind
  * everything that comes after it.
  *
- * Reuses --weave-diamond and --weave-kalinga from globals.css.
+ * Reuses --weave-diamond from globals.css.
  */
 
 const CRIMSON = '#9E2A2B';
@@ -127,23 +127,6 @@ export default function AuthBackdrop() {
         />
       ))}
 
-      {/* Woven strips along top and bottom edges */}
-      <div
-        className="backdrop-drift absolute inset-x-0 top-0 h-6 opacity-80"
-        style={{
-          backgroundImage: 'var(--weave-kalinga)',
-          backgroundSize: '48px 24px',
-          backgroundRepeat: 'repeat-x',
-        }}
-      />
-      <div
-        className="backdrop-drift-reverse absolute inset-x-0 bottom-0 h-6 opacity-80"
-        style={{
-          backgroundImage: 'var(--weave-kalinga)',
-          backgroundSize: '48px 24px',
-          backgroundRepeat: 'repeat-x',
-        }}
-      />
     </div>
   );
 }
