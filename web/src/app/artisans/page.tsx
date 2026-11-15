@@ -2,7 +2,6 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { listApprovedArtisans } from '@/lib/db';
-import WeaveDivider from '@/components/WeaveDivider';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,8 +11,6 @@ export default async function ArtisansPage() {
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
       <Header />
-
-      <WeaveDivider pattern="kalinga" />
 
 <main className="mx-auto max-w-6xl px-4 py-8 flex-1 w-full">
         {/* Page Heading */}

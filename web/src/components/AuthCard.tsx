@@ -1,11 +1,9 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import WeaveDivider from '@/components/WeaveDivider';
 
 /**
  * Card used by the forgot-password / reset-password pages:
- * weave border, logo + brand name, title, description, content,
- * and a "Back to Sign in" link.
+ * logo + brand name, title, description, content, and a "Back to Sign in" link.
  */
 export default function AuthCard({
   title,
@@ -18,8 +16,6 @@ export default function AuthCard({
 }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-abaca-200/90 bg-white/95 p-6 shadow-sm sm:rounded-3xl sm:p-8">
-      <WeaveDivider pattern="kalinga" className="absolute left-0 right-0 top-0 opacity-30" />
-
       {/* Logo and Brand Name */}
       <div className="mb-6 flex w-full flex-col items-center text-center">
         <img

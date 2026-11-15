@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import WeaveDivider from '@/components/WeaveDivider';
 import { getSession } from '@/lib/auth';
 import ProductDetailClient from './ProductDetailClient';
 import ProductGallery from './ProductGallery';
@@ -37,7 +36,6 @@ const workshopReviews = reviews.filter((r) => r.purchase_type === 'workshop');
   return (
     <div className="flex min-h-screen flex-col bg-[#FCF9F4]">
       <Header />
-      <WeaveDivider pattern="kalinga" />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
         {/* ===== MAIN PRODUCT CARD ===== */}

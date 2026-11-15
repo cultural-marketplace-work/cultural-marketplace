@@ -6,10 +6,9 @@ export default function ProductCard({ product, priority = false }: { product: Pr
   return (
     <Link
       href={`/customer/browse/${product.id}`}
-      className="group relative flex flex-col overflow-hidden rounded-2xl border border-abaca-200/90 bg-white shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-ochre-400 hover:shadow-md"
+      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-[#E6DDC8] bg-[#FFFDF6] shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-ochre-400 hover:shadow-md"
     >
-      {/* Photo with aspect ratio & subtle abaca texture fallback */}
-      <div className="relative h-48 w-full overflow-hidden bg-abaca-100/60">
+      <div className="relative aspect-[3/2] w-full overflow-hidden bg-abaca-100/60">
         {product.image_path ? (
           <Image
             src={product.image_path}
@@ -26,51 +25,93 @@ export default function ProductCard({ product, priority = false }: { product: Pr
           </div>
         )}
 
-        {/* Top Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5">
+        <div className="absolute left-2.5 top-2.5 flex flex-wrap gap-1.5">
           {product.has_tutorial && (
-            <span className="badge bg-ochre-400 text-charcoal-950 font-bold border border-ochre-500 shadow-xs text-[10px] py-0.5 px-2">
-              🌿 Living Workshop
-            </span>
-          )}
-          {product.nfc_tag_id && (
-            <span className="badge bg-charcoal-900/90 text-ochre-300 shadow-xs text-[10px] font-bold py-0.5 px-2 backdrop-blur-xs">
-              ✔ Verified NFC
+            <span className="rounded-full bg-[#D9AD16] px-2.5 py-1 text-[10px] font-semibold text-white shadow-sm">
+              Tutorial Available!
             </span>
           )}
         </div>
+        {product.nfc_tag_id && (
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-charcoal-900/90 px-2 py-1 text-[9px] font-bold text-ochre-300 shadow-sm backdrop-blur-xs">
+            ✔ Verified NFC
+          </span>
+        )}
       </div>
 
-      {/* Card Content */}
-      <div className="flex flex-1 flex-col justify-between p-4 bg-white/95">
-        <div>
-          <h3 className="line-clamp-1 font-sculpted text-base font-bold text-charcoal-900 group-hover:text-crimson-700 transition-colors">
+      <div className="flex flex-1 flex-col p-3 sm:p-4">
+        <div className="min-w-0">
+          <h3 className="line-clamp-1 font-serif text-base font-bold text-[#45413D] transition-colors group-hover:text-crimson-700 sm:text-lg">
             {product.name}
           </h3>
 
-          {product.materials_used && (
-            <p className="mt-0.5 line-clamp-1 text-[11px] font-medium text-ochre-700">
-              🧵 {product.materials_used}
+          {(product.category || product.materials_used) && (
+            <p className="mt-0.5 line-clamp-1 text-[10px] font-medium text-[#C5832B]">
+              {product.category || product.materials_used}
             </p>
           )}
 
-          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-stone-500">
-            {product.description ?? ''}
-          </p>
+          {product.description && (
+            <div className="mt-2">
+              <p className="text-[9px] font-medium text-stone-500">Description:</p>
+              <p className="line-clamp-1 text-[10px] leading-snug text-stone-500">
+                {product.description}
+              </p>
+            </div>
+          )}
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t border-abaca-100 pt-3">
-          <div>
-            <span className="text-[10px] uppercase tracking-wider text-stone-400 block font-semibold">Exchange</span>
-            <span className="text-lg font-bold text-crimson-700">
+        <div className="mt-auto">
+          <div className="mt-3 flex items-baseline justify-between gap-2">
+            <span className="text-base font-bold text-[#A50000]">
               ₱{Number(product.price).toFixed(2)}
             </span>
+            <span className="text-right text-[9px] text-stone-500">
+              {product.has_variations && product.variations_data?.length
+                ? `${product.variations_data.length} variants`
+                : `${product.stock_quantity} pieces available`}
+            </span>
           </div>
-          <span className="text-right text-xs text-stone-400 font-medium">
-            {product.has_variations && product.variations_data?.length
-              ? `${product.variations_data.length} variants`
-              : `${product.stock_quantity} available`}
-          </span>
+
+          {product.has_tutorial && (
+            <div className="mt-1.5 border-t border-[#D8D1C4] pt-1.5">
+              <h4 className="line-clamp-1 text-xs font-semibold text-[#45413D]">
+                {product.tutorial_title || product.name}
+              </h4>
+
+              {product.tutorial_dates?.length ? (
+                <div className="mt-1 space-y-0.5">
+                  {product.tutorial_dates.slice(0, 2).map((session, index) => (
+                    <p
+                      key={`${session.date}-${index}`}
+                      className="line-clamp-1 text-[8px] leading-tight text-stone-500"
+                    >
+                      {session.date}
+                      {(session.location || product.tutorial_location) &&
+                        ` | ${session.location || product.tutorial_location}`}
+                    </p>
+                  ))}
+                </div>
+              ) : product.tutorial_location ? (
+                <p className="mt-1 line-clamp-1 text-[8px] leading-tight text-stone-500">
+                  {product.tutorial_location}
+                </p>
+              ) : null}
+
+              <div className="mt-1 flex items-baseline justify-between gap-2">
+                <span className="text-[10px] font-bold text-[#C5832B]">
+                  {product.tutorial_fee_type === 'free'
+                    ? 'FREE / person'
+                    : `₱${Number(product.tutorial_price ?? product.price).toFixed(2)} / person`}
+                </span>
+                {product.tutorial_capacity != null && (
+                  <span className="text-right text-[9px] text-stone-500">
+                    {product.tutorial_capacity} slots
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Link>

@@ -32,7 +32,6 @@ export default function RegisterPage() {
           </div>
         </Link>
 
-        {/* Full-width weave band under the header */}
         <WeaveDivider pattern="kalinga" />
 
         {/* Body */}

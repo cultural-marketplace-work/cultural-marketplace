@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import WeaveDivider from '@/components/WeaveDivider';
 import { getProductByNfc, getArtisan } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -15,16 +14,10 @@ export default async function VerifyPage({ params }: { params: Promise<{ tagId: 
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
       <Header />
-      {/* Top decorative weave border */}
-  <div className="relative z-20">
-    <WeaveDivider pattern="kalinga" />
-  </div>
 
       <main className="mx-auto max-w-2xl px-4 py-16 text-center flex-1 flex flex-col justify-center">
         {product && product.status === 'active' && product.nfc_tag_status === 'active' ? (
           <div className="rounded-3xl border-2 border-ochre-400 bg-white p-8 sm:p-12 shadow-md relative overflow-hidden text-center">
-            <WeaveDivider pattern="kalinga" className="absolute top-0 left-0 right-0" />
-
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-ochre-500 to-crimson-700 text-4xl text-white shadow-sm">
               <span>🛡️</span>
             </div>

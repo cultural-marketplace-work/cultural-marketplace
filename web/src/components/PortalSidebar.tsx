@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import WeaveDivider from '@/components/WeaveDivider';
 import {
   Home,
   ReceiptText,
@@ -183,10 +182,6 @@ export default function PortalSidebar({
       </div>
 
 
-    {/* FULL-WIDTH WEAVE DIVIDER */}
-<div className="-mx-6 w-[calc(100%+3rem)] shrink-0 py-2">
-  <WeaveDivider className="!w-full !mx-0 !max-w-none" />
-</div>
       {/* NAVIGATION SECTIONS */}
       <nav
         className="my-3 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 text-xs font-medium [scrollbar-color:#B8A58F_transparent] [scrollbar-width:thin]"
