@@ -15,11 +15,15 @@ export default async function VerifyPage({ params }: { params: Promise<{ tagId: 
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
       <Header />
+      {/* Top decorative weave border */}
+  <div className="relative z-20">
+    <WeaveDivider pattern="kalinga" />
+  </div>
 
       <main className="mx-auto max-w-2xl px-4 py-16 text-center flex-1 flex flex-col justify-center">
         {product && product.status === 'active' && product.nfc_tag_status === 'active' ? (
           <div className="rounded-3xl border-2 border-ochre-400 bg-white p-8 sm:p-12 shadow-md relative overflow-hidden text-center">
-            <WeaveDivider pattern="diamond" className="absolute top-0 left-0 right-0 opacity-40" />
+            <WeaveDivider pattern="kalinga" className="absolute top-0 left-0 right-0" />
 
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-ochre-500 to-crimson-700 text-4xl text-white shadow-sm">
               <span>🛡️</span>
@@ -40,7 +44,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ tagId: 
 
             {product.materials_used && (
               <div className="mt-4 inline-block rounded-xl bg-abaca-100/70 px-4 py-2 text-xs font-medium text-charcoal-900 border border-abaca-200">
-                🧵 Materials: <span className="font-bold">{product.materials_used}</span>
+                Materials: <span className="font-bold">{product.materials_used}</span>
               </div>
             )}
 
@@ -51,11 +55,11 @@ export default async function VerifyPage({ params }: { params: Promise<{ tagId: 
 
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link href={`/customer/browse/${product.id}`} className="btn-primary text-xs px-5 py-2.5 font-semibold">
-                Explore this Authentic Piece →
+                Explore this Authentic Craft →
               </Link>
               {artisan && (
                 <Link href={`/artisans/${artisan.id}`} className="btn-outline text-xs px-5 py-2.5 font-semibold">
-                  View Artisan Atelier
+                  View Artisan Profile
                 </Link>
               )}
             </div>

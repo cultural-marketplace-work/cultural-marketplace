@@ -64,7 +64,7 @@ export default async function ArtisanProfilePage({ params }: { params: Promise<{
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 {artisan.craft_type && (
                   <span className="rounded-xl bg-abaca-100/70 px-3 py-1 font-semibold text-charcoal-900 border border-abaca-200">
-                    Specialty: {artisan.craft_type}
+                    Master of: {artisan.craft_type}
                   </span>
                 )}
                 {artisan.location && (
