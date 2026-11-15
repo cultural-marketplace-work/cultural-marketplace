@@ -4,16 +4,17 @@ import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import WeaveDivider from '@/components/WeaveDivider';
 import FeaturedCarousel from './FeaturedCarousel';  
-import { listActiveProducts, getSettings, listCategories, getProductRatingStats } from '@/lib/db';
+import { listActiveProducts, getSettings, listCategories, getProductRatingStats, listApprovedArtisans } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const [products, settings, categories, ratings] = await Promise.all([
+  const [products, settings, categories, ratings, artisans] = await Promise.all([
   listActiveProducts(),
   getSettings(),
   listCategories('product'),
   getProductRatingStats(),
+  listApprovedArtisans(),
 ]);
 
 // Highest average rating first; ties go to the product with more reviews
@@ -25,6 +26,7 @@ const featured = [...products]
   })
   .slice(0, 12);
 const workshopCrafts = products.filter((p) => p.has_tutorial).slice(0, 3);
+const artisanById = new Map(artisans.map((a) => [a.id, a]));
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
@@ -182,26 +184,53 @@ const workshopCrafts = products.filter((p) => p.has_tutorial).slice(0, 3);
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-3">
-              {workshopCrafts.map((w) => (
-                <div key={w.id} className="rounded-2xl border border-abaca-200 bg-white p-5 shadow-2xs flex flex-col justify-between hover:border-ochre-400 transition">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-ochre-800">Hands-on Experience</span>
-                    <h3 className="font-sculpted text-base font-bold text-charcoal-900 mt-1 line-clamp-1">{w.tutorial_title || w.name}</h3>
-                    <p className="text-xs text-stone-500 mt-1 line-clamp-2">{w.tutorial_description || w.description}</p>
-                    {w.tutorial_location && (
-                      <p className="text-[11px] text-stone-400 mt-2">📍 {w.tutorial_location}</p>
-                    )}
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-abaca-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-charcoal-900 font-mono">
-                      {w.tutorial_fee_type === 'free' ? 'FREE Workshop' : `₱${Number(w.tutorial_price ?? w.price).toFixed(2)} / attendee`}
-                    </span>
-                    <Link href={`/customer/browse/${w.id}`} className="text-xs font-semibold text-crimson-700 hover:underline">
-                      Reserve Pass →
-                    </Link>
-                  </div>
-                </div>
-              ))}
+              {workshopCrafts.map((w) => {
+  const artisan = artisanById.get(w.artisan_id);
+  return (
+    <div key={w.id} className="rounded-2xl border border-abaca-200 bg-white p-5 shadow-2xs flex flex-col justify-between hover:border-ochre-400 transition">
+      <div>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-ochre-800">Hands-on Experience</span>
+        <h3 className="font-sculpted text-base font-bold text-charcoal-900 mt-1 line-clamp-1">{w.tutorial_title || w.name}</h3>
+        <p className="text-xs text-stone-500 mt-1 line-clamp-2">{w.tutorial_description || w.description}</p>
+        {w.tutorial_location && (
+          <p className="text-[11px] text-stone-400 mt-2">📍 {w.tutorial_location}</p>
+        )}
+
+        {artisan && (
+          <Link
+            href={`/artisans/${artisan.id}`}
+            className="mt-3 flex items-center gap-2.5 rounded-xl border border-abaca-100 bg-canvas/50 p-2 transition hover:border-ochre-300"
+          >
+            {artisan.profile_picture ? (
+              <img
+                src={artisan.profile_picture}
+                alt={artisan.name}
+                className="h-9 w-9 shrink-0 rounded-full border border-[#D8C8B5] object-cover"
+              />
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8C8B5] bg-white text-sm font-bold text-[#8B0000]">
+                {artisan.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 leading-tight">
+              <p className="text-[9px] text-stone-500">Taught by</p>
+              <p className="truncate text-xs font-bold text-charcoal-900">{artisan.name}</p>
+            </div>
+          </Link>
+        )}
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-abaca-100 flex items-center justify-between">
+        <span className="text-xs font-bold text-charcoal-900 font-mono">
+          {w.tutorial_fee_type === 'free' ? 'FREE Workshop' : `₱${Number(w.tutorial_price ?? w.price).toFixed(2)} / attendee`}
+        </span>
+        <Link href={`/customer/browse/${w.id}`} className="text-xs font-semibold text-crimson-700 hover:underline">
+          Reserve Pass →
+        </Link>
+      </div>
+    </div>
+  );
+})}
             </div>
           </section>
         )}
