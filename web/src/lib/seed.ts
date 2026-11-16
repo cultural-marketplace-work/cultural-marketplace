@@ -178,8 +178,9 @@ export const seedAddresses: Array<{
 
 export const seedSettings: Record<string, string> = {
   platform_name: 'Cultural Marketplace',
-  homepage_banner_title: 'Discover Authentic Indigenous Crafts & Experiences',
-  homepage_banner_subtitle: 'Supporting Agusan del Sur Artisans and Preserving Cultural Heritage',
+  homepage_banner_title: 'Discover Authentic Indigenous Crafts and Cultural Experiences in Agusan del Sur.',
+  homepage_banner_subtitle:
+    'Every handcrafted piece carries a story, a tradition, and the artistry of Indigenous communities. Shop authentic products directly from verified artisans while helping preserve their culture for future generations.',
   commission_rate: '5',
   contact_email: 'admin@culturalmarketplace.com',
   homepage_featured_products: '[]',
