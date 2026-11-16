@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { getSession } from '@/lib/auth';
 import { getCartCount, getUser } from '@/lib/db';
 import MobileMenu from './MobileMenu';
+import DesktopNavigation from './DesktopNavigation';
 import SearchBox from './SearchBox';
 
 export default async function Header() {
@@ -135,18 +136,7 @@ export default async function Header() {
         </div>
 
         {/* DESKTOP NAVIGATION */}
-        <nav className="hidden items-center gap-4 text-sm font-medium text-charcoal-800 xl:flex">
-          {desktopLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              prefetch={true}
-              className="whitespace-nowrap transition-colors hover:text-crimson-600"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <DesktopNavigation links={desktopLinks} />
 
         {/* USER ACTIONS */}
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -239,9 +229,9 @@ export default async function Header() {
 
               <Link
                 href="/auth/register"
-                className="flex min-h-[36px] items-center justify-center whitespace-nowrap rounded-lg bg-crimson-700 px-3.5 py-1.5 text-sm font-bold text-white transition hover:bg-crimson-800"
+                className="flex min-h-[36px] items-center justify-center whitespace-nowrap rounded-lg bg-crimson-700 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-crimson-800"
               >
-                Join Gathering
+                Join Community
               </Link>
             </div>
           )}

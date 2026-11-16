@@ -41,7 +41,7 @@ export default function FeaturedCarousel({ children }: { children: ReactNode }) 
       <div
         ref={trackRef}
         onScroll={update}
-        className="flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="touch-scroll flex snap-x snap-mandatory flex-nowrap gap-6 overflow-x-auto overscroll-x-contain scroll-smooth pb-2 touch-pan-x"
       >
         {children}
       </div>

@@ -4,29 +4,29 @@ import CustomerRegisterForm from './CustomerRegisterForm';
 
 export default function RegisterPage() {
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-canvas px-3 py-8 sm:px-6 sm:py-12">
+    <main className="relative flex min-h-screen items-center justify-center bg-canvas px-3 py-6 sm:px-4 sm:py-8">
       {/* Registration Card */}
-      <div className="w-full max-w-xl overflow-hidden rounded-[2rem] border border-stone-300 bg-white">
+      <div className="w-full max-w-md overflow-hidden rounded-[1.5rem] border border-stone-300 bg-white shadow-[0_8px_20px_rgba(0,0,0,0.04)]">
 
         {/* Logo and Brand Name (links back to the storefront) */}
         <Link
           href="/"
           aria-label="Cultural Marketplace — home"
-          className="flex flex-wrap items-center justify-center gap-3 px-6 py-4 sm:py-5"
+          className="flex flex-wrap items-center justify-center gap-3 px-5 py-3 sm:py-4"
         >
           <img
             src="/images/cultural-marketplace-logo.png"
             alt="Cultural Marketplace Logo"
-            className="h-10 w-auto max-w-[110px] object-contain sm:h-12 sm:max-w-[130px]"
+            className="h-8 w-auto max-w-[90px] object-contain sm:h-10 sm:max-w-[100px]"
           />
 
           <div className="flex min-w-0 flex-col leading-tight">
-            <h1 className="text-xl font-extrabold tracking-tight sm:text-[28px]">
+            <h1 className="text-lg font-extrabold tracking-tight sm:text-[24px]">
               <span className="text-[#8B0000]">Cultural</span>{' '}
               <span className="text-[#FFA500]">Marketplace</span>
             </h1>
 
-            <p className="mt-0.5 text-[10px] font-bold text-[#B00000] sm:text-[11px]">
+            <p className="mt-0.5 text-[9px] font-bold text-[#B00000] sm:text-[10px]">
               Agusan del Sur Indigenous Crafts and Experiences
             </p>
           </div>
@@ -35,15 +35,15 @@ export default function RegisterPage() {
         <WeaveDivider pattern="kalinga" />
 
         {/* Body */}
-        <div className="px-5 pb-7 pt-5 sm:px-9 sm:pb-8">
+        <div className="px-4 pb-6 pt-4 sm:px-7 sm:pb-7">
 
           {/* Page Heading */}
           <div className="text-center">
-            <h2 className="font-sculpted text-2xl font-bold text-charcoal-900 sm:text-3xl">
+            <h2 className="font-sculpted text-xl font-bold text-charcoal-900 sm:text-2xl">
               Join the Community
             </h2>
 
-            <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-stone-500 sm:text-sm">
+            <p className="mx-auto mt-2 max-w-md text-[11px] leading-relaxed text-stone-500 sm:text-xs">
               Create your patron account to support Indigenous artisans,
               collect authentic crafts, and participate in living cultural
               workshops.

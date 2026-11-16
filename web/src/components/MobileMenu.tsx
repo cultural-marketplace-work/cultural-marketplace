@@ -3,15 +3,16 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { usePathname } from 'next/navigation';
 import WeaveDivider from '@/components/WeaveDivider';
-
-export interface NavLink { href: string; label: string }
+import { isActiveNavLink, type NavLink } from './nav-utils';
 
 export default function MobileMenu({
   links, loggedIn, name, avatar,
 }: { links: NavLink[]; loggedIn: boolean; name?: string | null; avatar?: string | null }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     setMounted(true);
@@ -123,16 +124,25 @@ export default function MobileMenu({
 
               {/* Navigation links with ≥44px touch target */}
               <div className="space-y-1">
-                {links.map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className="flex min-h-[44px] items-center rounded-xl px-3.5 py-2.5 text-sm font-semibold text-charcoal-800 hover:bg-ochre-50 hover:text-crimson-700 active:bg-ochre-100 transition"
-                    onClick={() => setOpen(false)}
-                  >
-                    {l.label}
-                  </Link>
-                ))}
+                {links.map((l) => {
+                  const active = isActiveNavLink(pathname, l.href);
+
+                  return (
+                    <Link
+                      key={l.href}
+                      href={l.href}
+                      aria-current={active ? 'page' : undefined}
+                      className={`flex min-h-[44px] items-center rounded-xl border-l-4 px-3.5 py-2.5 text-sm transition ${
+                        active
+                          ? 'border-yellow-500 bg-yellow-50 font-semibold text-yellow-700'
+                          : 'border-transparent font-medium text-charcoal-800 hover:bg-ochre-50 hover:text-crimson-700 active:bg-ochre-100'
+                      }`}
+                      onClick={() => setOpen(false)}
+                    >
+                      {l.label}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
 
