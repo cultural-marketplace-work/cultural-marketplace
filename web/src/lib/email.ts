@@ -1,12 +1,12 @@
 // Email delivery, transport-agnostic:
 //   1. SMTP   — when SMTP_HOST + SMTP_USER are set (legacy Gmail app password)
 //   2. Resend — when RESEND_API_KEY is set (needs a verified sending domain)
-//   3. Console — dev/demo fallback; in non-production the OTP is surfaced in
-//      the API response so the preview works with no provider at all.
+//   3. Console — dev/demo fallback; the registration flow reports delivery
+//      failure rather than exposing the OTP when no provider is configured.
 
 import nodemailer from 'nodemailer';
 
-const FROM = process.env.EMAIL_FROM || process.env.OTP_FROM_EMAIL || 'Cultural Marketplace <noreply@localhost>';
+const FROM = process.env.EMAIL_FROM || process.env.OTP_FROM_EMAIL || 'Cultural Marketplace <indigenouscrafts.ads@gmail.com>';
 
 export interface MailOptions {
   subject: string;

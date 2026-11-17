@@ -16,13 +16,13 @@ export default async function ArtisansPage() {
         {/* Page Heading */}
         <div className="border-b border-abaca-200 pb-6">
           <h1 className="font-sculpted text-xl sm:text-2xl font-bold text-charcoal-900">
-            Local Artisans &amp; Lineage
+            Meet Our Local Artisans
           </h1>
 
           <p className="mt-1 max-w-xl text-xs leading-relaxed text-stone-600">
-            Meet the Indigenous Masters, traditional weavers, and cultural
-            custodians preserving generations of ancestral craftsmanship
-            across Agusan del Sur.
+            Get to know the Indigenous artisans of Agusan del Sur who continue to 
+            preserve traditional crafts, skills, and cultural practices passed 
+            down through generations.
           </p>
         </div>
 

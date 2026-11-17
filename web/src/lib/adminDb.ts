@@ -94,7 +94,7 @@ export async function listCustomers(): Promise<CustomerRow[]> {
     const rows = await sql`
       select u.id, u.name, u.email, u.phone, u.location, u.created_at,
         (select count(*) from orders o where o.customer_id = u.id) as order_count
-      from users u where u.role = 'customer' order by u.created_at desc nulls last limit 200`;
+      from users u where u.role = 'customer' order by u.created_at desc nulls last`;
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
       id: n(r.id), name: String(r.name), email: String(r.email),
       phone: (r.phone as string) ?? null, location: (r.location as string) ?? null,
@@ -103,7 +103,7 @@ export async function listCustomers(): Promise<CustomerRow[]> {
     }));
   }
   return store().users
-    .filter((u) => u.role === 'customer' && !u.email.endsWith('@demo.local'))
+    .filter((u) => u.role === 'customer')
     .map((u) => ({
       id: u.id, name: u.name, email: u.email, phone: u.phone, location: u.location,
       order_count: store().orders.filter((o) => o.customer_id === u.id).length,

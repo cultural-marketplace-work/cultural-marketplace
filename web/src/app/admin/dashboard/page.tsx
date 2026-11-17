@@ -7,7 +7,7 @@ export default async function AdminDashboard() {
   const [stats, logs] = await Promise.all([adminStats(), listActivityLogs(8)]);
 
   const cards = [
-    { label: 'Customers', value: stats.customers, href: '/admin/artisans' },
+    { label: 'Customers', value: stats.customers, href: '/admin/customers' },
     { label: 'Artisans', value: stats.artisans, href: '/admin/artisans' },
     { label: 'Pending approvals', value: stats.pendingArtisans, href: '/admin/artisans?filter=pending' },
     { label: 'Orders', value: stats.orders, href: '/admin/orders' },

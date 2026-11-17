@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import { Suspense } from 'react';
 import { BadgeCheck, CalendarDays, Compass, Fingerprint, Flower2, Gem, Handbag, Leaf, Palette, ScrollText, ShieldCheck, ShoppingBag, Sparkles, Trees, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import PageLoading from '@/components/PageLoading';
 import ProductCard from '@/components/ProductCard';
 import FeaturedCarousel from './FeaturedCarousel';
 import { listActiveProducts, getSettings, listCategories, getProductRatingStats, listApprovedArtisans } from '@/lib/db';
@@ -30,7 +32,15 @@ function CategoryIcon({ name }: { name: string }): ReactNode {
   return <Icon className={iconClass} strokeWidth={1.8} aria-hidden="true" />;
 }
 
-export default async function HomePage() {
+export default function HomePage() {
+  return (
+    <Suspense fallback={<PageLoading label="homepage" />}>
+      <HomePageContent />
+    </Suspense>
+  );
+}
+
+async function HomePageContent() {
   const [products, settings, categories, ratings, artisans] = await Promise.all([
     listActiveProducts(),
     getSettings(),
