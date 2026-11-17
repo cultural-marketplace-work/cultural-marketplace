@@ -40,15 +40,11 @@ export default function Footer() {
             </div>
 
             <p className="text-xs leading-relaxed text-[#51443A]">
-              Preserving and honoring the living Indigenous traditions of
-              Agusan del Sur. Connecting master weavers, woodcarvers, and
-              cultural keepers directly with respectful global patrons.
+              Preserving the Indigenous traditions of Agusan del Sur 
+              by connecting local artisans and cultural communities with 
+              buyers around the world. Supporting traditional crafts, sharing 
+              cultural knowledge, and keeping heritage alive for future generations.
             </p>
-
-            <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#D9A441]/50 bg-white px-3 py-1 text-[11px] font-medium text-[#8B5E00]">
-              <span>🌿</span>
-              <span>Custodians of Agusan del Sur</span>
-            </div>
           </div>
 
           {/* Column 1: Discover */}
@@ -90,12 +86,12 @@ export default function Footer() {
             <ul className="space-y-2 text-xs text-[#51443A]">
               <li>
                 <Link href="/auth/register-artisan" className="transition hover:text-[#990000]">
-                  Enroll as a Master Artisan
+                  Register as an Artisan
                 </Link>
               </li>
               <li>
                 <Link href="/auth/login" className="transition hover:text-[#990000]">
-                  Sign in to Patron Portal
+                  Costumer Login
                 </Link>
               </li>
               <li>
@@ -118,13 +114,13 @@ export default function Footer() {
             </p>
 
             <p className="text-xs leading-relaxed text-[#51443A]">
-              Each craft pattern represents centuries of sacred heritage.
-              Motifs are utilized with tribal attribution, ensuring genuine
-              cultural preservation without sacred misuse.
+              Each craft design reflects the traditions and cultural heritage 
+              of Indigenous communities. We respect the meaning of every pattern 
+              and help preserve these traditions by recognizing their cultural origins.
             </p>
 
             <p className="text-[11px] leading-relaxed text-[#8B5E00]">
-              Caraga Administrative Region · Agusan del Sur, Philippines
+              Caraga Region · Agusan del Sur, Philippines
             </p>
           </div>
         </div>
@@ -133,7 +129,7 @@ export default function Footer() {
           <div className="mt-4 flex flex-col items-center justify-between gap-2 border-t border-[#DCC5A8] pt-3 text-center text-xs text-[#78695C] sm:mt-5 lg:flex-row">
           <p className="leading-relaxed">
             © {new Date().getFullYear()} Cultural Marketplace. All rights
-            reserved. Handcrafted with reverence.
+            reserved.
           </p>
 
           <p className="text-[11px] leading-relaxed">

@@ -36,19 +36,11 @@ const artisanById = new Map(artisans.map((a) => [a.id, a]));
       <main className="mx-auto max-w-6xl px-4 py-10 flex-1 w-full">
         {/* Page Header */}
         <div className="border-b border-abaca-200 pb-6">
-          <div className="flex items-center gap-2 text-xs text-stone-500 mb-1">
-            <Link href="/" className="hover:text-crimson-700">Home</Link>
-            <span>/</span>
-            <span className="font-semibold text-charcoal-900">
-              {workshopOnly ? 'Living Cultural Workshops' : 'Discover the Craft'}
-            </span>
-          </div>
-
-          <h1 className="font-sculpted text-3xl sm:text-4xl font-bold text-charcoal-900">
-            {workshopOnly ? 'Living Cultural Workshops' : 'Discover the Craft'}
+          <h1 className="font-sculpted text-xl sm:text-2xl font-bold text-charcoal-900">
+            {workshopOnly ? 'Living Cultural Workshops' : 'Explore Indigenous Crafts'}
           </h1>
           <p className="mt-1.5 text-sm text-stone-600 max-w-2xl">
-            Explore authentic handwoven textiles, traditional woodcarvings, basketry, and living workshop experiences from Agusan del Sur master craftspeople.
+            Discover authentic handmade products, including woven textiles, woodcarvings, baskets, and cultural workshops created and offered by skilled Indigenous artisans in Agusan del Sur.
           </p>
 
           {/* Filter Toolbar */}
@@ -95,25 +87,6 @@ const artisanById = new Map(artisans.map((a) => [a.id, a]));
                 {workshopOnly ? 'Workshop Crafts' : 'Authentic Crafts'}
               </div>
             )}
-          </div>
-
-          {/* Browse by craft chips */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ochre-700">
-              Browse by craft:
-            </span>
-            {visibleCategories.map((c) => (
-              <Link
-                key={c.id}
-                href={`/customer/browse?category=${encodeURIComponent(c.name)}${workshopOnly ? '&workshop=1' : ''}`}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${activeCategory === c.name
-                  ? 'border-crimson-700 bg-crimson-700 text-white'
-                  : 'border-abaca-300 bg-white text-charcoal-800 hover:border-ochre-400 hover:bg-ochre-50'
-                  }`}
-              >
-                {c.name}
-              </Link>
-            ))}
           </div>
 
           {activeQ && (

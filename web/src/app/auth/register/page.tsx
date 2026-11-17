@@ -4,46 +4,44 @@ import CustomerRegisterForm from './CustomerRegisterForm';
 
 export default function RegisterPage() {
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-canvas px-3 py-6 sm:px-4 sm:py-8">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-3 py-6">
       {/* Registration Card */}
-      <div className="w-full max-w-md overflow-hidden rounded-[1.5rem] border border-stone-300 bg-white shadow-[0_8px_20px_rgba(0,0,0,0.04)]">
-
+      <div className="w-full max-w-[280px] overflow-hidden rounded-[14px] border border-stone-300 bg-white">
         {/* Logo and Brand Name (links back to the storefront) */}
         <Link
           href="/"
           aria-label="Cultural Marketplace — home"
-          className="flex flex-wrap items-center justify-center gap-3 px-5 py-3 sm:py-4"
+          className="flex items-center justify-center gap-1.5 px-3 py-2"
         >
           <img
             src="/images/cultural-marketplace-logo.png"
             alt="Cultural Marketplace Logo"
-            className="h-8 w-auto max-w-[90px] object-contain sm:h-10 sm:max-w-[100px]"
+            className="h-6 w-auto max-w-[64px] object-contain"
           />
 
           <div className="flex min-w-0 flex-col leading-tight">
-            <h1 className="text-lg font-extrabold tracking-tight sm:text-[24px]">
+            <h1 className="text-[12px] font-extrabold tracking-tight">
               <span className="text-[#8B0000]">Cultural</span>{' '}
               <span className="text-[#FFA500]">Marketplace</span>
             </h1>
 
-            <p className="mt-0.5 text-[9px] font-bold text-[#B00000] sm:text-[10px]">
+            <p className="mt-0.5 text-[5px] font-bold text-[#B00000]">
               Agusan del Sur Indigenous Crafts and Experiences
             </p>
           </div>
         </Link>
 
-        <WeaveDivider pattern="kalinga" />
+        <WeaveDivider pattern="kalinga" className="!h-2" />
 
         {/* Body */}
-        <div className="px-4 pb-6 pt-4 sm:px-7 sm:pb-7">
-
+        <div className="px-4 pb-3 pt-3">
           {/* Page Heading */}
           <div className="text-center">
-            <h2 className="font-sculpted text-xl font-bold text-charcoal-900 sm:text-2xl">
-              Join the Community
+            <h2 className="font-serif text-[15px] font-bold leading-tight text-charcoal-900">
+              Join Our Community
             </h2>
 
-            <p className="mx-auto mt-2 max-w-md text-[11px] leading-relaxed text-stone-500 sm:text-xs">
+            <p className="mx-auto mt-2 max-w-md text-[7px] leading-[1.4] text-stone-500">
               Create your patron account to support Indigenous artisans,
               collect authentic crafts, and participate in living cultural
               workshops.
@@ -56,7 +54,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Sign In Link */}
-          <p className="mt-5 text-center text-xs leading-relaxed text-stone-500 sm:text-sm">
+          <p className="mt-2 text-center text-[7px] leading-tight text-stone-500">
             Already have an account?{' '}
             <Link
               className="font-medium text-crimson-700 underline transition hover:text-crimson-800"
@@ -65,19 +63,16 @@ export default function RegisterPage() {
               Log in
             </Link>
           </p>
+          <p className="mt-0.5 text-center text-[7px] leading-tight text-stone-500">
+            <Link
+              href="/"
+              className="font-medium text-stone-600 underline transition hover:text-charcoal-900"
+            >
+              Return to Marketplace
+            </Link>
+          </p>
         </div>
-        
       </div>
-            {/* RETURN TO STOREFRONT - BELOW REGISTRATION CARD */}
-      <div className="absolute bottom-4 left-0 w-full text-center sm:bottom-6">
-        <Link
-          href="/"
-          className="text-xs font-semibold text-stone-500 transition hover:text-charcoal-900 sm:text-sm"
-        >
-          ← Return to Storefront
-        </Link>
-      </div>
-      
     </main>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -45,13 +44,14 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <form onSubmit={submit} className="space-y-3">
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-[10px] text-red-700">{error}</p>}
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-stone-600">Email</label>
+        <label htmlFor="login-email" className="mb-0.5 block text-[9px] font-medium text-stone-600">Email</label>
         <input
-          className="input !rounded-lg !py-1.5"
+          id="login-email"
+          className="input !h-[21px] !rounded-md !px-2 !py-0 !text-[9px]"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -61,9 +61,10 @@ export default function LoginForm() {
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-stone-600">Password</label>
+        <label htmlFor="login-password" className="mb-0.5 block text-[9px] font-medium text-stone-600">Password</label>
         <input
-          className="input !rounded-lg !py-1.5"
+          id="login-password"
+          className="input !h-[21px] !rounded-md !px-2 !py-0 !text-[9px]"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -72,12 +73,11 @@ export default function LoginForm() {
         />
       </div>
 
-      {/* Terms and Conditions + Forgot password, level on one line */}
-      <div className="flex items-center justify-between gap-4">
-        <label className="flex min-w-0 items-center gap-3 text-xs leading-relaxed text-stone-600 sm:text-sm">
+      <div>
+        <label className="flex min-w-0 items-center gap-1.5 text-[8px] leading-relaxed text-stone-600">
           <input
             type="checkbox"
-            className="h-4 w-4 shrink-0 accent-[#8B0000]"
+            className="h-3 w-3 shrink-0 accent-[#8B0000]"
             checked={terms}
             onChange={(e) => setTerms(e.target.checked)}
             required
@@ -87,17 +87,10 @@ export default function LoginForm() {
             I agree to the Terms &amp; Conditions and Privacy Policy
           </span>
         </label>
-
-        <Link
-          href="/auth/forgot-password"
-          className="shrink-0 whitespace-nowrap text-xs font-semibold text-crimson-700 hover:underline sm:text-sm"
-        >
-          Forgot password?
-        </Link>
       </div>
 
       <button
-        className="btn-primary w-full !rounded-md !bg-[#9E0000] !py-1.5 text-sm font-bold hover:!bg-[#8B0000] disabled:opacity-60"
+        className="btn-primary w-full !h-[21px] !min-h-0 !rounded-md !bg-[#9E0000] !px-3 !py-0 !text-[9px] font-bold hover:!bg-[#8B0000] disabled:opacity-60"
         disabled={busy}
         type="submit"
       >

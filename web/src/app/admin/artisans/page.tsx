@@ -1,16 +1,14 @@
-import { listPendingArtisans, listApprovedArtisans } from '@/lib/db';
-import { getProductCountsByArtisan } from '@/lib/db';
+import { getProductCountsByArtisan, listAllArtisansAdmin } from '@/lib/db';
 import ArtisansClient from './ArtisansClient';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminArtisansPage() {
-  const [pending, approved, counts] = await Promise.all([
-    listPendingArtisans(),
-    listApprovedArtisans(),
+  const [artisans, counts] = await Promise.all([
+    listAllArtisansAdmin(),
     getProductCountsByArtisan(),
   ]);
-  const withProducts = approved.map((a) => ({
+  const withProducts = artisans.map((a) => ({
     ...a,
     productCount: counts.get(a.id) ?? 0,
   }));
@@ -18,10 +16,15 @@ export default async function AdminArtisansPage() {
   return (
     <div>
       <h1 className="font-serif text-2xl font-bold text-brand-900">Artisan management</h1>
-      <ArtisansClient
-        pending={pending.map((a) => ({ id: a.id, name: a.name, email: a.email, craft_type: a.craft_type, location: a.location }))}
-        approved={withProducts.map((a) => ({ id: a.id, name: a.name, email: a.email, craft_type: a.craft_type, productCount: a.productCount }))}
-      />
+      <ArtisansClient initial={withProducts.map((a) => ({
+        id: a.id,
+        name: a.name,
+        email: a.email,
+        craft_type: a.craft_type,
+        location: a.location,
+        verification_status: a.verification_status,
+        productCount: a.productCount,
+      }))} />
     </div>
   );
 }
