@@ -168,17 +168,25 @@ export async function createCustomer(input: { name: string; email: string; passw
 
 export async function createArtisan(input: {
   name: string; email: string; password: string; phone: string; location: string;
-  craft_type: string; business_name?: string; id_number: string; dob?: string;
+  craft_type: string; business_name?: string; id_number: string; id_type: string; dob?: string;
+  indigenous_affiliation?: string; affiliation_document_path?: string | null;
   id_document_path?: string | null; id_document_back_path?: string | null;
   proof_of_craft_path?: string | null; product_sample_1_path?: string | null; product_sample_2_path?: string | null;
   selfie_path?: string | null; face_matched?: boolean | null; face_confidence?: number | null;
+  duplicate_face_match?: boolean | null; liveness_status: 'passed' | 'manual_review';
+  liveness_challenges: string[]; liveness_verified_at?: string | null;
   registration_notes?: string | null;
 }): Promise<number> {
   if (usingPostgres) {
-    const rows = await sql`insert into artisans (name, email, password, phone, location, craft_type, business_name, id_number, dob, id_document_path, id_document_back_path, proof_of_craft_path, product_sample_1_path, product_sample_2_path, selfie_path, face_matched, face_confidence, registration_notes, verification_status)
-      values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, ${input.location}, ${input.craft_type}, ${input.business_name ?? null}, ${input.id_number}, ${input.dob ?? null}, ${input.id_document_path ?? null}, ${input.id_document_back_path ?? null}, ${input.proof_of_craft_path ?? null}, ${input.product_sample_1_path ?? null}, ${input.product_sample_2_path ?? null}, ${input.selfie_path ?? null}, ${input.face_matched ?? null}, ${input.face_confidence ?? null}, ${input.registration_notes ?? null}, 'pending')
-      returning id`;
-    const id = num(rows[0].id);
+    const id = await sql.begin(async (tx) => {
+      const rows = await tx`insert into artisans (name, email, password, phone, location, craft_type, business_name, id_number, id_type, dob, indigenous_affiliation, affiliation_document_path, id_document_path, id_document_back_path, proof_of_craft_path, product_sample_1_path, product_sample_2_path, selfie_path, verification_status)
+        values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, ${input.location}, ${input.craft_type}, ${input.business_name ?? null}, ${input.id_number}, ${input.id_type}, ${input.dob ?? null}, ${input.indigenous_affiliation ?? null}, ${input.affiliation_document_path ?? null}, ${input.id_document_path ?? null}, ${input.id_document_back_path ?? null}, ${input.proof_of_craft_path ?? null}, ${input.product_sample_1_path ?? null}, ${input.product_sample_2_path ?? null}, ${input.selfie_path ?? null}, 'pending')
+        returning id`;
+      const artisanId = num(rows[0].id);
+      await tx`insert into artisan_verification_results (artisan_id, face_matched, face_confidence, duplicate_face_match, liveness_status, liveness_challenges, liveness_verified_at, registration_notes)
+        values (${artisanId}, ${input.face_matched ?? null}, ${input.face_confidence ?? null}, ${input.duplicate_face_match ?? null}, ${input.liveness_status}, ${JSON.stringify(input.liveness_challenges)}::jsonb, ${input.liveness_verified_at ?? null}, ${input.registration_notes ?? null})`;
+      return artisanId;
+    });
     // Mirror into users (legacy schema keeps artisan credentials in both tables):
     // notifications and other FKs point at users(id), so without this row every
     // later notification for this artisan would fail. Best-effort — login also
@@ -197,7 +205,14 @@ export async function createArtisan(input: {
     id, name: input.name, email: input.email, password: input.password, phone: input.phone,
     location: input.location, craft_type: input.craft_type, business_name: input.business_name ?? null,
     bio: null, profile_picture: null, verification_status: 'pending',
+    id_type: input.id_type,
+    duplicate_face_match: input.duplicate_face_match ?? null,
+    liveness_status: input.liveness_status,
+    liveness_challenges: input.liveness_challenges,
+    liveness_verified_at: input.liveness_verified_at ?? null,
     id_document_path: input.id_document_path ?? null, id_document_back_path: input.id_document_back_path ?? null,
+    indigenous_affiliation: input.indigenous_affiliation ?? null,
+    affiliation_document_path: input.affiliation_document_path ?? null,
     proof_of_craft_path: input.proof_of_craft_path ?? null, product_sample_1_path: input.product_sample_1_path ?? null, product_sample_2_path: input.product_sample_2_path ?? null,
     selfie_path: input.selfie_path ?? null, face_matched: input.face_matched ?? null,
     face_confidence: input.face_confidence ?? null, registration_notes: input.registration_notes ?? null,
@@ -207,6 +222,18 @@ export async function createArtisan(input: {
   const uid = Math.max(0, ...store!.users.map((u) => u.id)) + 1;
   store!.users.push({ id: uid, name: input.name, email: input.email, password: input.password, role: 'artisan', location: input.location, phone: input.phone, profile_picture: null });
   return id;
+}
+
+export async function appendArtisanRegistrationNote(id: number, note: string): Promise<void> {
+  if (usingPostgres) {
+    await sql`update artisan_verification_results
+      set registration_notes = concat_ws(' ', nullif(registration_notes, ''), ${note})
+      where artisan_id = ${id}`;
+    invalidate('artisans*');
+    return;
+  }
+  const artisan = store!.artisans.find((entry) => entry.id === id);
+  if (artisan) artisan.registration_notes = [artisan.registration_notes, note].filter(Boolean).join(' ');
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +395,11 @@ function mapArtisan(r: Record<string, unknown>): Artisan {
     business_name: (r.business_name as string) ?? null, craft_type: (r.craft_type as string) ?? null,
     location: (r.location as string) ?? null, bio: (r.bio as string) ?? null,
     profile_picture: (r.profile_picture as string) ?? null,
+    id_type: (r.id_type as string) ?? null,
+    duplicate_face_match: (r.duplicate_face_match as boolean) ?? null,
+    liveness_status: (r.liveness_status as Artisan['liveness_status']) ?? null,
+    liveness_challenges: (r.liveness_challenges as string[]) ?? null,
+    liveness_verified_at: r.liveness_verified_at == null ? null : String(r.liveness_verified_at),
     verification_status: r.verification_status as Artisan['verification_status'],
     phone: (r.phone as string) ?? null,
   };

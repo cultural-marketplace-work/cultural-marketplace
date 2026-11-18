@@ -10,6 +10,7 @@
 //   R4  Proof of craft production uploaded         — hard
 //   R5  Product sample 1 uploaded                  — hard
 //   R6  Product sample 2 uploaded                  — hard
+//   R7  Indigenous affiliation & evidence submitted — advisory for legacy records
 
 export interface VerificationEvidence {
   id_document_path?: string | null;
@@ -21,6 +22,8 @@ export interface VerificationEvidence {
   face_matched?: boolean | null;
   face_confidence?: number | null;
   id_number?: string | null;
+  indigenous_affiliation?: string | null;
+  affiliation_document_path?: string | null;
 }
 
 export interface RuleResult {
@@ -65,6 +68,13 @@ export function evaluateVerificationRules(a: VerificationEvidence): RuleResult[]
       id: 'R6', label: 'Product sample 2 of 2',
       status: a.product_sample_2_path ? 'pass' : 'fail',
       detail: a.product_sample_2_path ? 'Uploaded' : 'Not submitted',
+    },
+    {
+      id: 'R7', label: 'Indigenous affiliation and supporting evidence',
+      status: a.indigenous_affiliation && a.affiliation_document_path ? 'pass' : 'warn',
+      detail: a.indigenous_affiliation && a.affiliation_document_path
+        ? `${a.indigenous_affiliation} — evidence submitted`
+        : 'Not submitted — admin review required',
     },
   ];
 }

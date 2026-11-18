@@ -9,12 +9,18 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const idImage = form.get('id_image') as File | null;
     const selfie = form.get('selfie') as File | null;
-    if (!idImage || !selfie) return NextResponse.json({ match: false, message: 'Need ID image and selfie.' }, { status: 400 });
+    if (!idImage || !selfie) {
+      return NextResponse.json(
+        { status: 'error', match: false, message: 'Need ID image and selfie.' },
+        { status: 400 }
+      );
+    }
 
     const result = await verifyFace(await idImage.arrayBuffer(), await selfie.arrayBuffer());
     if (result.status === 'ok') {
       const pct = Math.round(result.data.confidence * 100);
       return NextResponse.json({
+        status: 'ok',
         match: Boolean(result.data.match),
         confidence: result.data.confidence,
         distance: result.data.distance,
@@ -25,6 +31,7 @@ export async function POST(req: Request) {
     }
     if (result.status === 'skipped') {
       return NextResponse.json({
+        status: 'skipped',
         match: false,
         skipped: true,
         message: 'Face comparison service is offline. Photo saved for manual admin review.',
@@ -34,14 +41,25 @@ export async function POST(req: Request) {
     await logFaceAttempt({ result: 'error', detail: { step: 'preview', message: result.message } });
 
     const isNoFace = result.message?.toLowerCase().includes('no face') || result.message?.toLowerCase().includes('face found');
+    if (isNoFace) {
+      return NextResponse.json({
+        status: 'no_face',
+        match: false,
+        no_face: true,
+        message: 'No face was detected in one or both images. Ensure your face and ID photo are clear and well-lit.',
+      });
+    }
     return NextResponse.json({
+      status: 'error',
       match: false,
-      no_face: isNoFace,
-      message: result.message || (isNoFace
-        ? 'No face was detected in one or both images. Ensure your face and ID photo are clearly visible and well-lit.'
-        : 'Face comparison service error.'),
+      message: 'Automatic face comparison is unavailable. You may continue; an admin will review your ID and selfie.',
     });
   } catch (err) {
-    return NextResponse.json({ match: false, message: 'Face check failed. Admin will review manually.' }, { status: 500 });
+    console.error('Face preview failed:', err);
+    return NextResponse.json({
+      status: 'error',
+      match: false,
+      message: 'Automatic face comparison is unavailable. You may continue; an admin will review your ID and selfie.',
+    }, { status: 500 });
   }
 }

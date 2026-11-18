@@ -15,6 +15,10 @@ const files = [
   '../supabase/migrations/0004_shipments.sql',
   '../supabase/migrations/0005_nfc_write.sql',
   '../supabase/migrations/0006_image_moderation.sql',
+  '../supabase/migrations/0007_chat_updated_at.sql',
+  '../supabase/migrations/0009_artisan_affiliation.sql',
+  '../supabase/migrations/0010_artisan_id_type.sql',
+  '../supabase/migrations/0011_artisan_liveness_results.sql',
 ];
 
 let failed = false;

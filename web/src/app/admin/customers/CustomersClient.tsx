@@ -34,7 +34,7 @@ export default function CustomersClient({ initial }: { initial: Row[] }) {
         setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...editing } : r)));
         setEditing(null);
       }
-      router.refresh();
+      if (action !== 'delete') router.refresh();
     } catch {
       setMsg('Unable to complete the action. Please try again.');
     } finally {

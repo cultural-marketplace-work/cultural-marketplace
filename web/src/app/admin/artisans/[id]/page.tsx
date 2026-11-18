@@ -20,6 +20,7 @@ export default async function AdminArtisanReviewPage({ params }: { params: Promi
   const evidenceSources = [
     { key: 'id_front', label: 'ID front', path: artisan.id_document_path },
     { key: 'id_back', label: 'ID back', path: artisan.id_document_back_path },
+    { key: 'affiliation', label: 'Affiliation evidence', path: artisan.affiliation_document_path },
     { key: 'proof', label: 'Proof of craft', path: artisan.proof_of_craft_path },
     { key: 'sample1', label: 'Product sample 1', path: artisan.product_sample_1_path },
     { key: 'sample2', label: 'Product sample 2', path: artisan.product_sample_2_path },
@@ -42,7 +43,14 @@ export default async function AdminArtisanReviewPage({ params }: { params: Promi
           id: artisan.id, name: artisan.name, email: artisan.email, phone: artisan.phone,
           location: artisan.location, craft_type: artisan.craft_type, business_name: artisan.business_name,
           bio: artisan.bio, status: artisan.verification_status,
-          id_number: artisan.id_number ?? null, dob: artisan.dob ?? null,
+          id_number: artisan.id_number ?? null, id_type: artisan.id_type ?? null, dob: artisan.dob ?? null,
+          face_matched: artisan.face_matched ?? null, face_confidence: artisan.face_confidence ?? null,
+          duplicate_face_match: artisan.duplicate_face_match ?? null,
+          liveness_status: artisan.liveness_status ?? null,
+          liveness_challenges: artisan.liveness_challenges ?? [],
+          liveness_verified_at: artisan.liveness_verified_at ?? null,
+          registration_notes: artisan.registration_notes ?? null,
+          indigenous_affiliation: artisan.indigenous_affiliation ?? null,
           has_id_docs: Boolean(artisan.id_document_path), has_proof: Boolean(artisan.proof_of_craft_path),
         }}
         productCount={products.length}

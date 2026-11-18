@@ -15,7 +15,11 @@ interface Props {
   artisan: {
     id: number; name: string; email: string; phone: string | null; location: string | null;
     craft_type: string | null; business_name: string | null; bio: string | null; status: string;
-    id_number: string | null; dob: string | null; has_id_docs: boolean; has_proof: boolean;
+    id_number: string | null; id_type: string | null; dob: string | null; has_id_docs: boolean; has_proof: boolean;
+    indigenous_affiliation: string | null;
+    face_matched: boolean | null; face_confidence: number | null; duplicate_face_match: boolean | null;
+    liveness_status: 'passed' | 'manual_review' | null; liveness_challenges: string[]; liveness_verified_at: string | null;
+    registration_notes: string | null;
   };
   productCount: number;
   rules: RuleResult[];
@@ -145,10 +149,20 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
         <div className="card p-5">
           <dl className="space-y-1 text-sm text-stone-600">
             <div className="flex justify-between"><dt>Status</dt><dd><span className="badge bg-stone-100 capitalize">{form.status}</span></dd></div>
+            <div className="flex justify-between"><dt>ID type</dt><dd>{artisan.id_type ?? '—'}</dd></div>
             <div className="flex justify-between"><dt>ID number</dt><dd className="font-mono text-xs">{form.id_number ?? '—'}</dd></div>
+            <div className="flex justify-between"><dt>Liveness</dt><dd>{artisan.liveness_status === 'passed' ? 'Browser challenges passed — review required' : 'Manual review'}</dd></div>
+            <div className="flex justify-between"><dt>Face-to-ID</dt><dd>{artisan.face_matched === true ? `Match (${Math.round((artisan.face_confidence ?? 0) * 100)}%)` : artisan.face_matched === false ? 'Below threshold' : 'Manual review'}</dd></div>
+            <div className="flex justify-between"><dt>Duplicate face</dt><dd>{artisan.duplicate_face_match === false ? 'No match found' : artisan.duplicate_face_match === true ? 'Possible duplicate' : 'Not checked'}</dd></div>
+            <div className="flex justify-between"><dt>Challenges</dt><dd>{artisan.liveness_challenges.length ? artisan.liveness_challenges.map((challenge) => challenge === 'blink_twice' ? 'Blink twice' : challenge === 'turn_both_sides' ? 'Turn both ways' : challenge).join(', ') : '—'}</dd></div>
+            {artisan.liveness_verified_at && <div className="flex justify-between"><dt>Liveness time</dt><dd>{new Date(artisan.liveness_verified_at).toISOString()}</dd></div>}
+            <div className="flex justify-between"><dt>Indigenous affiliation</dt><dd>{artisan.indigenous_affiliation ?? '—'}</dd></div>
             <div className="flex justify-between"><dt>Date of birth</dt><dd>{form.dob ?? '—'}</dd></div>
             <div className="flex justify-between"><dt>Products</dt><dd>{productCount}</dd></div>
           </dl>
+          {artisan.registration_notes && (
+            <p className="mt-3 rounded-lg bg-stone-50 p-3 text-xs text-stone-600">{artisan.registration_notes}</p>
+          )}
           <div className="mt-4 flex flex-wrap gap-2">
             {form.status !== 'approved' && <button className="btn-primary px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('approved')}>Approve</button>}
             {form.status !== 'suspended' && <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('suspended')}>Suspend</button>}
