@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import WeaveDivider from '@/components/WeaveDivider';
 
-type Step = 'details' | 'verify' | 'done';
+type Step = 'id' | 'details' | 'face' | 'credentials' | 'done';
 
 /**
  * Top section of the artisan registration page, styled like the login card:
@@ -50,38 +50,40 @@ export default function ArtisanHeader({ step }: { step: Step }) {
               workshops to people who want to learn about your heritage.
               </p>
 
-        {/* Progress Steps */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs">
-          <span
-            className={`badge ${
-              step === 'details'
-                ? 'bg-crimson-600 font-bold text-white'
-                : 'bg-ochre-100 text-ochre-800'
-            }`}
-          >
-            1. Personal Information
-          </span>
-          <span className="text-stone-300">→</span>
-          <span
-            className={`badge ${
-              step === 'verify'
-                ? 'bg-crimson-600 font-bold text-white'
-                : 'bg-stone-100 text-stone-400'
-            }`}
-          >
-            2. Identity &amp; Craft Verification
-          </span>
-          <span className="text-stone-300">→</span>
-          <span
-            className={`badge ${
-              step === 'done'
-                ? 'bg-ochre-700 font-bold text-white'
-                : 'bg-stone-100 text-stone-400'
-            }`}
-          >
-            3. Application Review
-          </span>
-        </div>
+        <ol className="mt-6 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          {([
+            ['id', '1. ID Validation'],
+            ['details', '2. Applicant Details'],
+            ['face', '3. Liveness & Face'],
+            ['credentials', '4. Affiliation & Craft'],
+          ] as const).map(([id, label]) => {
+            const active = step === id;
+            const completed = step === 'done' || (
+              ['id', 'details', 'face', 'credentials'].indexOf(step) >
+              ['id', 'details', 'face', 'credentials'].indexOf(id)
+            );
+            return (
+              <li
+                key={id}
+                aria-current={active ? 'step' : undefined}
+                className={`badge justify-center ${
+                  active
+                    ? 'bg-crimson-600 font-bold text-white'
+                    : completed
+                      ? 'bg-ochre-100 text-ochre-800'
+                      : 'bg-stone-100 text-stone-400'
+                }`}
+              >
+                {label}
+              </li>
+            );
+          })}
+        </ol>
+        {step === 'done' && (
+          <p className="mt-3 text-xs font-semibold text-ochre-800" role="status">
+            Application submitted — pending admin review
+          </p>
+        )}
       </div>
     </div>
   );

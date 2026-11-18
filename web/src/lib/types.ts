@@ -156,11 +156,18 @@ export interface Artisan {
   selfie_path?: string | null;
   face_matched?: boolean | null;
   face_confidence?: number | null;
+  duplicate_face_match?: boolean | null;
+  liveness_status?: 'passed' | 'manual_review' | null;
+  liveness_challenges?: string[] | null;
+  liveness_verified_at?: string | null;
   registration_notes?: string | null;
   id_number?: string | null;
   dob?: string | null;
+  id_type?: string | null;
   id_document_path?: string | null;
   id_document_back_path?: string | null;
+  indigenous_affiliation?: string | null;
+  affiliation_document_path?: string | null;
   proof_of_craft_path?: string | null;
   product_sample_1_path?: string | null;
   product_sample_2_path?: string | null;

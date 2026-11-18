@@ -8,22 +8,30 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
  * step opens it again. Nothing is stored in server memory, so it works on
  * Vercel, where each request may be handled by a different serverless instance.
  *
- * Secret: set PENDING_TOKEN_SECRET in Vercel (any long random string).
- * If it is missing we fall back to other server-side secrets already in use.
+ * Production requires a server-side secret. Development creates a process-local
+ * random secret when none of the configured server secrets are available.
  */
 
 const TTL_MS = 15 * 60_000; // 15 minutes
 
 function key(): Buffer {
-  const secret =
+  let secret =
     process.env.PENDING_TOKEN_SECRET ??
     process.env.SESSION_SECRET ??
     process.env.JWT_SECRET ??
     process.env.AUTH_SECRET ??
     process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  if (!secret && process.env.NODE_ENV === 'development') {
+    const runtime = globalThis as typeof globalThis & { __cmPendingTokenDevSecret?: string };
+    if (!runtime.__cmPendingTokenDevSecret) {
+      runtime.__cmPendingTokenDevSecret = randomBytes(32).toString('base64url');
+    }
+    secret = runtime.__cmPendingTokenDevSecret;
+  }
+
   if (!secret) {
-    throw new Error('No server secret configured for registration tokens.');
+    throw new Error('No server secret configured for registration tokens. Set PENDING_TOKEN_SECRET or JWT_SECRET.');
   }
 
   return createHash('sha256').update(`cm-pending-artisan:${secret}`).digest();

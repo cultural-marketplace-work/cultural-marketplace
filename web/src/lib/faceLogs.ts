@@ -2,7 +2,15 @@
 // Demo mode logs to console (no table in the in-memory store).
 import { sql, usingPg } from './dbPg';
 
-export type FaceLogResult = 'match' | 'no_match' | 'duplicate' | 'error' | 'skipped';
+export type FaceLogResult =
+  | 'match'
+  | 'no_match'
+  | 'duplicate'
+  | 'not_duplicate'
+  | 'liveness_passed'
+  | 'liveness_failed'
+  | 'error'
+  | 'skipped';
 
 export async function logFaceAttempt(entry: {
   email?: string | null; artisanId?: number | null; result: FaceLogResult;

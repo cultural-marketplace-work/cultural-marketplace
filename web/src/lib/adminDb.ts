@@ -194,8 +194,31 @@ export async function toggleCustomerStatus(id: number): Promise<void> {
 export async function getArtisanFull(id: number): Promise<(Artisan & { id_number?: string | null; dob?: string | null; id_document_path?: string | null; id_document_back_path?: string | null; proof_of_craft_path?: string | null }) | null> {
   syncFromCore();
   if (usingPg) {
-    const rows = await sql`select * from artisans where id = ${id} limit 1`;
-    return rows.length ? (rows[0] as unknown as Artisan & Record<string, unknown>) : null;
+    const rows = await sql`
+      select a.*,
+        r.face_matched as verification_face_matched,
+        r.face_confidence as verification_face_confidence,
+        r.duplicate_face_match,
+        r.liveness_status,
+        r.liveness_challenges,
+        r.liveness_verified_at,
+        r.registration_notes as verification_registration_notes
+      from artisans a
+      left join artisan_verification_results r on r.artisan_id = a.id
+      where a.id = ${id}
+      limit 1`;
+    if (!rows.length) return null;
+    const row = rows[0] as unknown as Record<string, unknown>;
+    return {
+      ...row,
+      face_matched: (row.verification_face_matched as boolean | null) ?? (row.face_matched as boolean | null) ?? null,
+      face_confidence: (row.verification_face_confidence as number | null) ?? (row.face_confidence as number | null) ?? null,
+      duplicate_face_match: (row.duplicate_face_match as boolean | null) ?? null,
+      liveness_status: (row.liveness_status as Artisan['liveness_status']) ?? null,
+      liveness_challenges: (row.liveness_challenges as string[] | null) ?? null,
+      liveness_verified_at: row.liveness_verified_at == null ? null : tsString(row.liveness_verified_at),
+      registration_notes: (row.verification_registration_notes as string | null) ?? (row.registration_notes as string | null) ?? null,
+    } as Artisan & Record<string, unknown>;
   }
   const a = store().artisans.find((x) => x.id === id);
   return a ? { ...a } : null;
