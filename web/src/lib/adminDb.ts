@@ -111,27 +111,72 @@ export async function listCustomers(): Promise<CustomerRow[]> {
     }));
 }
 
-export async function updateCustomer(id: number, p: { name?: string; email?: string; phone?: string; location?: string }): Promise<void> {
+export async function updateCustomer(id: number, p: { name?: string; email?: string; phone?: string; location?: string }): Promise<boolean> {
   if (usingPg) {
-    await sql`update users set
+    const rows = await sql`update users set
       name = coalesce(${p.name ?? null}, name),
       email = coalesce(${p.email ?? null}, email),
       phone = coalesce(${p.phone ?? null}, phone),
       location = coalesce(${p.location ?? null}, location)
-      where id = ${id} and role = 'customer'`;
-    return;
+      where id = ${id} and role = 'customer'
+      returning id`;
+    return rows.length > 0;
   }
   const u = store().users.find((x) => x.id === id && x.role === 'customer');
-  if (u) Object.assign(u, Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)));
+  if (!u) return false;
+  Object.assign(u, Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)));
+  return true;
 }
 
-export async function deleteCustomer(id: number): Promise<void> {
+export async function deleteCustomer(id: number): Promise<boolean> {
   if (usingPg) {
-    await sql`delete from users where id = ${id} and role = 'customer'`;
-    return;
+    return sql.begin(async (tx) => {
+      const customer = await tx`select id from users where id = ${id} and role = 'customer' for update`;
+      if (!customer.length) return false;
+
+      await tx`delete from reports where reporter_id = ${id}`;
+      await tx`delete from orders where customer_id = ${id}`;
+      await tx`delete from users where id = ${id} and role = 'customer'`;
+      return true;
+    });
   }
+
   const s = store();
-  s.users = s.users.filter((u) => u.id !== id);
+  if (!s.users.some((u) => u.id === id && u.role === 'customer')) return false;
+
+  const orderIds = new Set(s.orders.filter((order) => order.customer_id === id).map((order) => order.id));
+  const core = (globalThis as unknown as {
+    __cmDemoStore?: {
+      users: Array<{ id: number; role: string }>;
+      orders: Array<{ id: number; customer_id: number }>;
+      order_items: Array<{ order_id: number }>;
+      cart_items: Array<{ customer_id: number }>;
+      chat_conversations: Array<{ id: number; customer_id: number }>;
+      chat_messages: Array<{ conversation_id: number }>;
+      notifications: Array<{ user_id: number }>;
+      shipments: Array<{ customer_id: number; order_id: number }>;
+    };
+  }).__cmDemoStore;
+
+  if (core) {
+    const coreOrderIds = new Set(core.orders.filter((order) => order.customer_id === id).map((order) => order.id));
+    const conversationIds = new Set(core.chat_conversations.filter((conversation) => conversation.customer_id === id).map((conversation) => conversation.id));
+    core.users = core.users.filter((user) => user.id !== id || user.role !== 'customer');
+    core.orders = core.orders.filter((order) => order.customer_id !== id);
+    core.order_items = core.order_items.filter((item) => !coreOrderIds.has(item.order_id));
+    core.cart_items = core.cart_items.filter((item) => item.customer_id !== id);
+    core.chat_conversations = core.chat_conversations.filter((conversation) => conversation.customer_id !== id);
+    core.chat_messages = core.chat_messages.filter((message) => !conversationIds.has(message.conversation_id));
+    core.notifications = core.notifications.filter((notification) => notification.user_id !== id);
+    core.shipments = core.shipments.filter((shipment) => shipment.customer_id !== id && !coreOrderIds.has(shipment.order_id));
+  }
+
+  s.users = s.users.filter((user) => user.id !== id || user.role !== 'customer');
+  s.orders = s.orders.filter((order) => order.customer_id !== id);
+  s.order_items = s.order_items.filter((item) => !orderIds.has(item.order_id));
+  s.reports = s.reports.filter((report) => report.reporter_id !== id);
+  s.addresses = s.addresses.filter((address) => address.customer_id !== id);
+  return true;
 }
 
 export async function toggleCustomerStatus(id: number): Promise<void> {
