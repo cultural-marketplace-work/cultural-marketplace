@@ -15,6 +15,7 @@ const SECTIONS: NavSection[] = [
       { href: '/customer/account/addresses', label: 'Delivery Addresses', icon: 'map-pin' },
       { href: '/customer/account/report', label: 'Cultural Helpdesk & Reports', icon: 'flag' },
       { href: '/customer/account/profile', label: 'Profile', icon: 'user' },
+      { href: '/customer/account/cart', label: 'My Basket', icon: 'shopping-bag' },
     ],
   },
 ];
