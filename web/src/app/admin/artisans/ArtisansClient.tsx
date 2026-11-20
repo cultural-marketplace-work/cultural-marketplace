@@ -81,6 +81,7 @@ export default function ArtisansClient({ initial }: { initial: ArtisanRow[] }) {
               <div>
                 <Link href={`/admin/artisans/${a.id}`} className="font-semibold text-stone-800 hover:text-brand-700 hover:underline">{a.name}</Link>
                 <p className="text-sm text-stone-500">{a.email} · {a.craft_type ?? '—'} · {a.location ?? '—'}</p>
+                <span className="badge mt-1 border border-amber-200 bg-amber-50 text-amber-800">Manual review required</span>
               </div>
               <div className="flex gap-2">
                 <Link href={`/admin/artisans/${a.id}`} className="btn-outline px-3 py-1 text-xs">Manage profile</Link>

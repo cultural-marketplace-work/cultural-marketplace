@@ -1,65 +1,52 @@
 import { NextResponse } from 'next/server';
-import { verifyFace } from '@/lib/faceVerify';
+import { compareHumanFaces } from '@/lib/humanFaceVerification';
 import { logFaceAttempt } from '@/lib/faceLogs';
 
-// Live preview: selfie vs ID front, called from the capture screen so the
-// applicant can retake immediately. Final gate is server-side in /captures.
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
+// Live preview: Human.js compares the ID portrait and captured selfie.
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
     const idImage = form.get('id_image') as File | null;
     const selfie = form.get('selfie') as File | null;
-    if (!idImage || !selfie) {
+    if (
+      !idImage || !selfie ||
+      idImage.size === 0 || selfie.size === 0 ||
+      idImage.size > 8 * 1024 * 1024 || selfie.size > 8 * 1024 * 1024 ||
+      !idImage.type.startsWith('image/') || !selfie.type.startsWith('image/')
+    ) {
       return NextResponse.json(
-        { status: 'error', match: false, message: 'Need ID image and selfie.' },
+        { status: 'error', match: false, message: 'Upload image files of the ID and selfie, each under 8 MB.' },
         { status: 400 }
       );
     }
 
-    const result = await verifyFace(await idImage.arrayBuffer(), await selfie.arrayBuffer());
+    const result = await compareHumanFaces(await idImage.arrayBuffer(), await selfie.arrayBuffer());
     if (result.status === 'ok') {
-      const pct = Math.round(result.data.confidence * 100);
+      const pct = Math.round(result.similarity * 100);
       return NextResponse.json({
         status: 'ok',
-        match: Boolean(result.data.match),
-        confidence: result.data.confidence,
-        distance: result.data.distance,
-        message: result.data.match
+        match: result.match,
+        confidence: result.similarity,
+        distance: result.distance,
+        message: result.match
           ? `Face matched your ID photo (${pct}% confidence).`
           : `Face did not match ID photo (${pct}% match score). You can retake or proceed with manual review.`,
       });
     }
-    if (result.status === 'skipped') {
-      return NextResponse.json({
-        status: 'skipped',
-        match: false,
-        skipped: true,
-        message: 'Face comparison service is offline. Photo saved for manual admin review.',
-      });
-    }
-
-    await logFaceAttempt({ result: 'error', detail: { step: 'preview', message: result.message } });
-
-    const isNoFace = result.message?.toLowerCase().includes('no face') || result.message?.toLowerCase().includes('face found');
-    if (isNoFace) {
-      return NextResponse.json({
-        status: 'no_face',
-        match: false,
-        no_face: true,
-        message: 'No face was detected in one or both images. Ensure your face and ID photo are clear and well-lit.',
-      });
-    }
-    return NextResponse.json({
-      status: 'error',
-      match: false,
-      message: 'Automatic face comparison is unavailable. You may continue; an admin will review your ID and selfie.',
-    });
+    return NextResponse.json({ status: 'no_face', match: false, no_face: true, message: result.message });
   } catch (err) {
     console.error('Face preview failed:', err);
+    await logFaceAttempt({
+      result: 'error',
+      detail: { step: 'preview', message: err instanceof Error ? err.message : 'Unknown Human.js error.' },
+    });
     return NextResponse.json({
       status: 'error',
       match: false,
-      message: 'Automatic face comparison is unavailable. You may continue; an admin will review your ID and selfie.',
+      message: 'Human.js face comparison is unavailable. You may continue; an admin will review your ID and selfie.',
     }, { status: 500 });
   }
 }

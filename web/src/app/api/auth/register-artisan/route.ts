@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { getArtisan, getArtisanByEmail } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { sealPending } from '@/lib/pendingToken';
-import { VALID_ARTISAN_ID_TYPES } from '@/lib/validArtisanIdTypes';
 
 // Fields carried from the text step to the capture step (inside the encrypted token).
 const FIELDS = [
@@ -38,12 +37,6 @@ export async function POST(req: Request) {
     }
     if (!name || name !== user.name) {
       return NextResponse.json({ status: 'error', message: 'Your account name could not be verified.' }, { status: 400 });
-    }
-    if (!VALID_ARTISAN_ID_TYPES.some((acceptedType) => acceptedType === idType)) {
-      return NextResponse.json({ status: 'error', message: 'Choose one of the accepted ID types.' }, { status: 400 });
-    }
-    if (!address) {
-      return NextResponse.json({ status: 'error', message: 'Enter the address shown on your ID.' }, { status: 400 });
     }
     const requestedChallengeOrder = (body.liveness_challenge_order ?? '').split(',');
     const challengeOrder = requestedChallengeOrder.length === 2 &&

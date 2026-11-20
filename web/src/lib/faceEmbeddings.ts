@@ -6,6 +6,9 @@ import type { Artisan } from './types';
 
 export type StoredEmbedding = { artisan_id: number; embedding: number[] };
 
+const HUMAN_EMBEDDING_SIZE = 1024;
+const LEGACY_EMBEDDING_SIZE = 128;
+
 type EncryptedEmbedding = {
   version: 1;
   iv: string;
@@ -36,7 +39,11 @@ function encryptEmbedding(embedding: number[]): EncryptedEmbedding {
 }
 
 function decryptEmbedding(value: unknown): { embedding: number[]; legacy: boolean } {
-  if (Array.isArray(value) && value.length === 128 && value.every((part) => typeof part === 'number' && Number.isFinite(part))) {
+  if (
+    Array.isArray(value) &&
+    (value.length === LEGACY_EMBEDDING_SIZE || value.length === HUMAN_EMBEDDING_SIZE) &&
+    value.every((part) => typeof part === 'number' && Number.isFinite(part))
+  ) {
     return { embedding: value, legacy: true };
   }
   if (!value || typeof value !== 'object') throw new Error('Stored face template has an invalid format.');
@@ -51,7 +58,11 @@ function decryptEmbedding(value: unknown): { embedding: number[]; legacy: boolea
     decipher.final(),
   ]).toString('utf8');
   const embedding: unknown = JSON.parse(json);
-  if (!Array.isArray(embedding) || embedding.length !== 128 || !embedding.every((part) => typeof part === 'number' && Number.isFinite(part))) {
+  if (
+    !Array.isArray(embedding) ||
+    (embedding.length !== LEGACY_EMBEDDING_SIZE && embedding.length !== HUMAN_EMBEDDING_SIZE) ||
+    !embedding.every((part) => typeof part === 'number' && Number.isFinite(part))
+  ) {
     throw new Error('Decrypted face template has an invalid format.');
   }
   return { embedding, legacy: false };
@@ -66,18 +77,30 @@ export async function listFaceEmbeddings(): Promise<StoredEmbedding[]> {
       if (legacy) {
         await sql`update face_embeddings set embedding = ${JSON.stringify(encryptEmbedding(embedding))}::jsonb where id = ${Number(row.id)}`;
       }
-      embeddings.push({ artisan_id: Number(row.artisan_id), embedding });
+      if (embedding.length === HUMAN_EMBEDDING_SIZE) {
+        embeddings.push({ artisan_id: Number(row.artisan_id), embedding });
+      }
     }
     return embeddings;
   }
   return (seedArtisansDemo() ?? [])
-    .filter((a) => Array.isArray(a.face_embedding) && a.face_embedding.length === 128)
+    .filter((a) => Array.isArray(a.face_embedding) && a.face_embedding.length === HUMAN_EMBEDDING_SIZE)
     .map((a) => ({ artisan_id: a.id, embedding: a.face_embedding as number[] }));
 }
 
 export async function saveFaceEmbedding(artisanId: number, embedding: number[]): Promise<void> {
+  if (
+    embedding.length !== HUMAN_EMBEDDING_SIZE ||
+    !embedding.every((part) => typeof part === 'number' && Number.isFinite(part))
+  ) {
+    throw new Error('Human.js face template has an invalid format.');
+  }
   if (usingPg) {
-    await sql`insert into face_embeddings (artisan_id, embedding) values (${artisanId}, ${JSON.stringify(encryptEmbedding(embedding))}::jsonb)`;
+    const encrypted = JSON.stringify(encryptEmbedding(embedding));
+    await sql.begin(async (tx) => {
+      await tx`delete from face_embeddings where artisan_id = ${artisanId}`;
+      await tx`insert into face_embeddings (artisan_id, embedding) values (${artisanId}, ${encrypted}::jsonb)`;
+    });
     return;
   }
   const list = seedArtisansDemo() ?? [];

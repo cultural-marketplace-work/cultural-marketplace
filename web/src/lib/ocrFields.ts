@@ -1,8 +1,14 @@
+import { VALID_ARTISAN_ID_TYPES } from './validArtisanIdTypes';
+
 export interface OcrApplicantFields {
   id_number: string | null;
   full_name: string | null;
   dob: string | null;
   address: string | null;
+  id_expiry_date: string | null;
+  id_expiry_label_found: boolean;
+  ocr_readable: boolean;
+  detected_id_type: string | null;
 }
 
 export interface OcrFields extends OcrApplicantFields {
@@ -18,7 +24,7 @@ const ID_PATTERNS = [
   /\bID\s*(?:NO|NUMBER)?[:.\s#]*([A-Z0-9-]{6,20})\b/i,
 ];
 
-const FIELD_LABEL = /^(?:FULL NAME|NAME|PANGALAN|LAST NAME|SURNAME|APELYIDO|FIRST NAME|GIVEN NAME|MIDDLE NAME|PRESENT ADDRESS|RESIDENTIAL ADDRESS|PERMANENT ADDRESS|ADDRESS|TIRAHAN|DOB|DATE OF BIRTH|BIRTHDATE|BIRTH DATE|KAPANGANAKAN|SEX|GENDER|NATIONALITY|ID NUMBER|ID NO)\b/i;
+const FIELD_LABEL = /^(?:FULL NAME|NAME|PANGALAN|LAST NAME|SURNAME|APELYIDO|FIRST NAME|GIVEN NAME|MIDDLE NAME|PRESENT ADDRESS|RESIDENTIAL ADDRESS|PERMANENT ADDRESS|ADDRESS|TIRAHAN|DOB|DATE OF BIRTH|BIRTHDATE|BIRTH DATE|KAPANGANAKAN|SEX|GENDER|NATIONALITY|ID NUMBER|ID NO|DATE OF (?:EXPIRATION|EXPIRY)|EXPIRATION DATE|EXPIRY DATE|VALID (?:UNTIL|THROUGH|THRU)|EXPIRES|EXPIRATION|EXPIRY)\b/i;
 
 function readLabeledValue(lines: string[], label: RegExp): string | null {
   for (let i = 0; i < lines.length; i++) {
@@ -56,9 +62,52 @@ function normalizeDate(text: string): string | null {
   return month ? validIsoDate(year, month, day) : null;
 }
 
+function normalizeExpiryDate(text: string): string | null {
+  const iso = text.match(/\b((?:19|20)\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (iso) return validIsoDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  const numeric = text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.]((?:19|20)\d{2})\b/);
+  if (numeric) {
+    const first = Number(numeric[1]);
+    const second = Number(numeric[2]);
+    const year = Number(numeric[3]);
+    if (first > 12) return validIsoDate(year, second, first);
+    if (second > 12) return validIsoDate(year, first, second);
+    return validIsoDate(year, second, first);
+  }
+
+  return normalizeDate(text);
+}
+
+function extractExpiryDate(lines: string[]): { date: string | null; labelFound: boolean } {
+  const label = /\b(?:DATE\s+OF\s+(?:EXPIRATION|EXPIRY)|EXPIRATION\s+DATE|EXPIRY\s+DATE|VALID\s+(?:UNTIL|THROUGH|THRU)|EXPIRES|EXPIRATION|EXPIRY)\b/i;
+  for (let index = 0; index < lines.length; index++) {
+    const match = lines[index].match(label);
+    if (!match || match.index == null) continue;
+
+    const inline = lines[index].slice(match.index + match[0].length);
+    const nextLine = lines[index + 1];
+    const date = normalizeExpiryDate(inline) ??
+      (nextLine && !FIELD_LABEL.test(nextLine) ? normalizeExpiryDate(nextLine) : null);
+    return { date, labelFound: true };
+  }
+  return { date: null, labelFound: false };
+}
+
 function cleanValue(value: string | null, maxLength: number): string | null {
   const cleaned = value?.replace(/\s+/g, ' ').replace(/^[\s,;:#-]+|[\s,;:#-]+$/g, '').trim();
   return cleaned ? cleaned.slice(0, maxLength) : null;
+}
+
+function detectIdType(rawText: string): string | null {
+  const patterns: Array<[string, RegExp]> = [
+    [VALID_ARTISAN_ID_TYPES[0], /\b(?:PHILSYS|PHILIPPINE IDENTIFICATION (?:SYSTEM|CARD)|NATIONAL ID|PCN)\b/i],
+    [VALID_ARTISAN_ID_TYPES[1], /\b(?:DRIVER'?S LICENSE|DRIVING LICENSE|LTO)\b/i],
+    [VALID_ARTISAN_ID_TYPES[2], /\b(?:UMID|UNIFIED MULTI[- ]PURPOSE ID)\b/i],
+    [VALID_ARTISAN_ID_TYPES[3], /\b(?:POSTAL ID|PHILPOST)\b/i],
+  ];
+  const matches = patterns.filter(([, pattern]) => pattern.test(rawText));
+  return matches.length === 1 ? matches[0][0] : null;
 }
 
 export function extractOcrFields(rawText: string): OcrFields {
@@ -86,6 +135,8 @@ export function extractOcrFields(rawText: string): OcrFields {
   const address = readLabeledValue(lines, /^(?:PRESENT\s+ADDRESS|RESIDENTIAL\s+ADDRESS|PERMANENT\s+ADDRESS|ADDRESS|TIRAHAN)\b/i)
     ?? lines.find((line) => /(?:purok|sitio|barangay|brgy|municipality|province|agusan)/i.test(line))
     ?? null;
+  const expiry = extractExpiryDate(lines);
+  const ocrReadable = raw.replace(/[^A-Z0-9]/gi, '').length >= 5;
 
   return {
     raw_text: raw.slice(0, 10000),
@@ -93,5 +144,9 @@ export function extractOcrFields(rawText: string): OcrFields {
     full_name: cleanValue(fullName, 100),
     dob,
     address: cleanValue(address, 200),
+    id_expiry_date: expiry.date,
+    id_expiry_label_found: expiry.labelFound,
+    ocr_readable: ocrReadable,
+    detected_id_type: detectIdType(raw),
   };
 }
