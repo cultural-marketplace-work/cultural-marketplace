@@ -145,6 +145,7 @@ export async function getVerificationDocUrl(path: string, expiresInSeconds = 300
   const sb = client();
   const prefix = 'verification-docs/';
   const object = path.startsWith(prefix) ? path.slice(prefix.length) : path;
-  const { data } = await sb.storage.from('verification-docs').createSignedUrl(object, expiresInSeconds);
+  const { data, error } = await sb.storage.from('verification-docs').createSignedUrl(object, expiresInSeconds);
+  if (error) throw new Error(`Unable to create signed verification URL: ${error.message}`);
   return data?.signedUrl ?? null;
 }

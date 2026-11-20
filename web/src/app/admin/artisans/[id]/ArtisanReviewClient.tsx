@@ -2,24 +2,28 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { RuleResult } from '@/lib/verificationRules';
+import type { RuleResult, VerificationDecision } from '@/lib/verificationRules';
 
 interface EvidenceItem {
   key: string;
   label: string;
   submitted: boolean;
   url: string | null;
+  urlError?: boolean;
+  mediaType?: string | null;
 }
 
 interface Props {
   artisan: {
     id: number; name: string; email: string; phone: string | null; location: string | null;
     craft_type: string | null; business_name: string | null; bio: string | null; status: string; application_submitted: boolean;
-    id_number: string | null; id_type: string | null; dob: string | null; has_id_docs: boolean; has_proof: boolean;
+    id_number: string | null; id_type: string | null; dob: string | null; id_expiry_date: string | null; id_expiry_checked: boolean;
+    has_id_docs: boolean; has_proof: boolean;
     indigenous_affiliation: string | null;
     face_matched: boolean | null; face_confidence: number | null; duplicate_face_match: boolean | null;
     liveness_status: 'passed' | 'manual_review' | null; liveness_challenges: string[]; liveness_verified_at: string | null;
     registration_notes: string | null;
+    verification_decision: VerificationDecision;
   };
   productCount: number;
   rules: RuleResult[];
@@ -27,10 +31,10 @@ interface Props {
   evidence: EvidenceItem[];
 }
 
-const RULE_MARK = { pass: '✓', warn: '⚠', fail: '✗' } as const;
+const RULE_MARK = { pass: '✓', review: '?', fail: '✗' } as const;
 const RULE_STYLE = {
-  pass: 'bg-ochre-100 text-ochre-900 border border-ochre-300 font-semibold',
-  warn: 'bg-ochre-100 text-ochre-900 border border-ochre-300 font-semibold',
+  pass: 'bg-green-50 text-green-800 border border-green-200 font-semibold',
+  review: 'bg-amber-50 text-amber-800 border border-amber-200 font-semibold',
   fail: 'bg-crimson-50 text-crimson-800 border border-crimson-200',
 } as const;
 
@@ -117,8 +121,10 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
         <div className="card p-5">
           <div className="flex items-center justify-between">
             <h2 className="font-serif text-lg font-bold text-brand-900">Verification checklist</h2>
-            <span className={`badge ${ruleSummary.canApprove ? 'bg-ochre-100 text-ochre-900 border border-ochre-300 font-semibold' : 'bg-crimson-50 text-crimson-800 border border-crimson-200'}`}>
-              {ruleSummary.canApprove ? 'Rules satisfied' : 'Incomplete'}
+            <span className={`badge ${artisan.verification_decision === 'auto_approved'
+              ? 'bg-green-50 text-green-800 border border-green-200 font-semibold'
+              : 'bg-amber-50 text-amber-800 border border-amber-200 font-semibold'}`}>
+              {artisan.verification_decision === 'auto_approved' ? 'Automatically approved' : 'Manual review'}
             </span>
           </div>
           <p className="mt-1 text-xs text-stone-500">{ruleSummary.text}</p>
@@ -147,11 +153,15 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
                 <p className="mb-1 text-[11px] font-medium text-stone-500">{e.label}</p>
                 {e.url ? (
                   <button type="button" onClick={() => setZoom(e)} className="block w-full">
-                    <img src={e.url} alt={e.label} className="h-20 w-full rounded object-cover" />
+                    {e.mediaType?.startsWith('video/')
+                      ? <video src={e.url} className="h-20 w-full rounded bg-black object-contain" muted playsInline />
+                      : <img src={e.url} alt={e.label} className="h-20 w-full rounded object-cover" />}
                   </button>
                 ) : (
                   <div className="flex h-20 w-full items-center justify-center rounded bg-stone-50 text-xl text-stone-300">
-                    {e.submitted ? '🔒' : '—'}
+                    {e.urlError
+                      ? <span className="text-xs text-amber-700">Preview unavailable</span>
+                      : e.submitted ? '🔒' : '—'}
                   </div>
                 )}
               </div>
@@ -163,6 +173,7 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
           <dl className="space-y-1 text-sm text-stone-600">
             <div className="flex justify-between"><dt>Status</dt><dd><span className="badge bg-stone-100 capitalize">{form.status}</span></dd></div>
             <div className="flex justify-between"><dt>ID type</dt><dd>{artisan.id_type ?? '—'}</dd></div>
+            <div className="flex justify-between"><dt>ID expiry</dt><dd>{artisan.id_expiry_date ?? (artisan.id_expiry_checked ? 'No expiry shown by OCR' : 'Manual review required')}</dd></div>
             <div className="flex justify-between"><dt>ID number</dt><dd className="font-mono text-xs">{form.id_number ?? '—'}</dd></div>
             <div className="flex justify-between"><dt>Liveness</dt><dd>{artisan.liveness_status === 'passed' ? 'Browser challenges passed — review required' : 'Manual review'}</dd></div>
             <div className="flex justify-between"><dt>Face-to-ID</dt><dd>{artisan.face_matched === true ? `Match (${Math.round((artisan.face_confidence ?? 0) * 100)}%)` : artisan.face_matched === false ? 'Below threshold' : 'Manual review'}</dd></div>
@@ -195,7 +206,9 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setZoom(null)}>
           <div className="max-h-full max-w-2xl overflow-auto rounded-xl bg-white p-3" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 text-sm font-semibold text-stone-700">{zoom.label}</p>
-            <img src={zoom.url ?? ''} alt={zoom.label} className="max-h-[70vh] rounded-lg" />
+            {zoom.mediaType?.startsWith('video/')
+              ? <video src={zoom.url ?? ''} className="max-h-[70vh] max-w-full rounded-lg" controls playsInline />
+              : <img src={zoom.url ?? ''} alt={zoom.label} className="max-h-[70vh] rounded-lg" />}
             <div className="mt-2 text-right">
               <button className="btn-outline px-3 py-1 text-xs" onClick={() => setZoom(null)}>Close</button>
             </div>

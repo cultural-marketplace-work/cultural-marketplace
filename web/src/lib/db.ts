@@ -241,6 +241,7 @@ export async function createUnverifiedArtisan(input: {
 export async function createArtisan(input: {
   name: string; email: string; password: string; phone: string; location: string;
   craft_type: string; business_name?: string; id_number: string; id_type: string; dob?: string;
+  id_expiry_date?: string | null; id_expiry_checked?: boolean;
   indigenous_affiliation?: string; affiliation_document_path?: string | null;
   id_document_path?: string | null; id_document_back_path?: string | null;
   proof_of_craft_path?: string | null; product_sample_1_path?: string | null; product_sample_2_path?: string | null;
@@ -248,8 +249,17 @@ export async function createArtisan(input: {
   duplicate_face_match?: boolean | null; liveness_status: 'passed' | 'manual_review';
   liveness_challenges: string[]; liveness_verified_at?: string | null;
   registration_notes?: string | null;
+  verification_status?: Artisan['verification_status'];
+  verification_criteria?: NonNullable<Artisan['verification_criteria']>;
+  verification_decision?: NonNullable<Artisan['verification_decision']>;
+  proof_of_craft_media_type?: string | null;
 }): Promise<number> {
   const dob = input.dob?.trim() || null;
+  const idExpiryDate = input.id_expiry_date?.trim() || null;
+  const idExpiryChecked = input.id_expiry_checked ?? false;
+  const verificationStatus = input.verification_status ?? 'pending';
+  const verificationDecision = input.verification_decision ?? 'manual_review';
+  const verificationCriteria = JSON.stringify(input.verification_criteria ?? []);
   if (usingPostgres) {
     const id = await sql.begin(async (tx) => {
       const existing = await tx`select id from artisans where lower(email) = ${input.email.toLowerCase()} limit 1`;
@@ -259,31 +269,37 @@ export async function createArtisan(input: {
           name = ${input.name}, phone = ${input.phone}, location = ${input.location},
           craft_type = ${input.craft_type}, business_name = ${input.business_name ?? null},
           id_number = ${input.id_number.trim() || null}, id_type = ${input.id_type}, dob = ${dob},
+          id_expiry_date = ${idExpiryDate}, id_expiry_checked = ${idExpiryChecked},
           indigenous_affiliation = ${input.indigenous_affiliation ?? null},
           affiliation_document_path = ${input.affiliation_document_path ?? null},
           id_document_path = ${input.id_document_path ?? null}, id_document_back_path = ${input.id_document_back_path ?? null},
           proof_of_craft_path = ${input.proof_of_craft_path ?? null},
           product_sample_1_path = ${input.product_sample_1_path ?? null},
           product_sample_2_path = ${input.product_sample_2_path ?? null}, selfie_path = ${input.selfie_path ?? null},
-          verification_status = 'pending', application_submitted = true
+          verification_status = ${verificationStatus}, application_submitted = true
           where id = ${artisanId}`;
         await tx`insert into artisan_verification_results
-          (artisan_id, face_matched, face_confidence, duplicate_face_match, liveness_status, liveness_challenges, liveness_verified_at, registration_notes)
+          (artisan_id, face_matched, face_confidence, duplicate_face_match, liveness_status, liveness_challenges, liveness_verified_at, registration_notes, verification_criteria, verification_decision, proof_of_craft_media_type)
           values (${artisanId}, ${input.face_matched ?? null}, ${input.face_confidence ?? null}, ${input.duplicate_face_match ?? null},
-            ${input.liveness_status}, ${JSON.stringify(input.liveness_challenges)}::jsonb, ${input.liveness_verified_at ?? null}, ${input.registration_notes ?? null})
+            ${input.liveness_status}, ${JSON.stringify(input.liveness_challenges)}::jsonb, ${input.liveness_verified_at ?? null},
+            ${input.registration_notes ?? null}, ${verificationCriteria}::jsonb, ${verificationDecision}, ${input.proof_of_craft_media_type ?? null})
           on conflict (artisan_id) do update set
             face_matched = excluded.face_matched, face_confidence = excluded.face_confidence,
             duplicate_face_match = excluded.duplicate_face_match, liveness_status = excluded.liveness_status,
             liveness_challenges = excluded.liveness_challenges, liveness_verified_at = excluded.liveness_verified_at,
-            registration_notes = excluded.registration_notes`;
+            registration_notes = excluded.registration_notes, verification_criteria = excluded.verification_criteria,
+            verification_decision = excluded.verification_decision, proof_of_craft_media_type = excluded.proof_of_craft_media_type`;
         return artisanId;
       }
-      const rows = await tx`insert into artisans (name, email, password, phone, location, craft_type, business_name, id_number, id_type, dob, indigenous_affiliation, affiliation_document_path, id_document_path, id_document_back_path, proof_of_craft_path, product_sample_1_path, product_sample_2_path, selfie_path, verification_status, application_submitted)
-        values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, ${input.location}, ${input.craft_type}, ${input.business_name ?? null}, ${input.id_number.trim() || null}, ${input.id_type}, ${dob}, ${input.indigenous_affiliation ?? null}, ${input.affiliation_document_path ?? null}, ${input.id_document_path ?? null}, ${input.id_document_back_path ?? null}, ${input.proof_of_craft_path ?? null}, ${input.product_sample_1_path ?? null}, ${input.product_sample_2_path ?? null}, ${input.selfie_path ?? null}, 'pending', true)
+      const rows = await tx`insert into artisans (name, email, password, phone, location, craft_type, business_name, id_number, id_type, dob, id_expiry_date, id_expiry_checked, indigenous_affiliation, affiliation_document_path, id_document_path, id_document_back_path, proof_of_craft_path, product_sample_1_path, product_sample_2_path, selfie_path, verification_status, application_submitted)
+        values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, ${input.location}, ${input.craft_type}, ${input.business_name ?? null}, ${input.id_number.trim() || null}, ${input.id_type}, ${dob}, ${idExpiryDate}, ${idExpiryChecked}, ${input.indigenous_affiliation ?? null}, ${input.affiliation_document_path ?? null}, ${input.id_document_path ?? null}, ${input.id_document_back_path ?? null}, ${input.proof_of_craft_path ?? null}, ${input.product_sample_1_path ?? null}, ${input.product_sample_2_path ?? null}, ${input.selfie_path ?? null}, ${verificationStatus}, true)
         returning id`;
       const artisanId = num(rows[0].id);
-      await tx`insert into artisan_verification_results (artisan_id, face_matched, face_confidence, duplicate_face_match, liveness_status, liveness_challenges, liveness_verified_at, registration_notes)
-        values (${artisanId}, ${input.face_matched ?? null}, ${input.face_confidence ?? null}, ${input.duplicate_face_match ?? null}, ${input.liveness_status}, ${JSON.stringify(input.liveness_challenges)}::jsonb, ${input.liveness_verified_at ?? null}, ${input.registration_notes ?? null})`;
+      await tx`insert into artisan_verification_results
+        (artisan_id, face_matched, face_confidence, duplicate_face_match, liveness_status, liveness_challenges, liveness_verified_at, registration_notes, verification_criteria, verification_decision, proof_of_craft_media_type)
+        values (${artisanId}, ${input.face_matched ?? null}, ${input.face_confidence ?? null}, ${input.duplicate_face_match ?? null},
+          ${input.liveness_status}, ${JSON.stringify(input.liveness_challenges)}::jsonb, ${input.liveness_verified_at ?? null},
+          ${input.registration_notes ?? null}, ${verificationCriteria}::jsonb, ${verificationDecision}, ${input.proof_of_craft_media_type ?? null})`;
       return artisanId;
     });
     invalidate('artisans*');
@@ -295,7 +311,8 @@ export async function createArtisan(input: {
     Object.assign(existing, {
       name: input.name, phone: input.phone, location: input.location, craft_type: input.craft_type,
       business_name: input.business_name ?? null, id_number: input.id_number.trim() || null, id_type: input.id_type,
-      dob, indigenous_affiliation: input.indigenous_affiliation ?? null,
+      dob, id_expiry_date: idExpiryDate, id_expiry_checked: idExpiryChecked,
+      indigenous_affiliation: input.indigenous_affiliation ?? null,
       affiliation_document_path: input.affiliation_document_path ?? null,
       id_document_path: input.id_document_path ?? null, id_document_back_path: input.id_document_back_path ?? null,
       proof_of_craft_path: input.proof_of_craft_path ?? null, product_sample_1_path: input.product_sample_1_path ?? null,
@@ -303,7 +320,9 @@ export async function createArtisan(input: {
       face_matched: input.face_matched ?? null, face_confidence: input.face_confidence ?? null,
       duplicate_face_match: input.duplicate_face_match ?? null, liveness_status: input.liveness_status,
       liveness_challenges: input.liveness_challenges, liveness_verified_at: input.liveness_verified_at ?? null,
-      registration_notes: input.registration_notes ?? null, verification_status: 'pending', application_submitted: true,
+      registration_notes: input.registration_notes ?? null, verification_status: verificationStatus, application_submitted: true,
+      verification_criteria: input.verification_criteria ?? [], verification_decision: verificationDecision,
+      proof_of_craft_media_type: input.proof_of_craft_media_type ?? null,
     });
     invalidate('artisans*');
     invalidate('admin:stats');
@@ -313,9 +332,10 @@ export async function createArtisan(input: {
   store!.artisans.push({
     id, name: input.name, email: input.email, password: input.password, phone: input.phone,
     location: input.location, craft_type: input.craft_type, business_name: input.business_name ?? null,
-    bio: null, profile_picture: null, verification_status: 'pending',
+    bio: null, profile_picture: null, verification_status: verificationStatus,
     application_submitted: true,
     id_type: input.id_type,
+    id_expiry_date: idExpiryDate, id_expiry_checked: idExpiryChecked,
     duplicate_face_match: input.duplicate_face_match ?? null,
     liveness_status: input.liveness_status,
     liveness_challenges: input.liveness_challenges,
@@ -326,6 +346,8 @@ export async function createArtisan(input: {
     proof_of_craft_path: input.proof_of_craft_path ?? null, product_sample_1_path: input.product_sample_1_path ?? null, product_sample_2_path: input.product_sample_2_path ?? null,
     selfie_path: input.selfie_path ?? null, face_matched: input.face_matched ?? null,
     face_confidence: input.face_confidence ?? null, registration_notes: input.registration_notes ?? null,
+    verification_criteria: input.verification_criteria ?? [], verification_decision: verificationDecision,
+    proof_of_craft_media_type: input.proof_of_craft_media_type ?? null,
     dob,
   });
   invalidate('artisans*');
@@ -557,6 +579,24 @@ export async function getArtisanByEmail(email: string): Promise<Artisan | null> 
     return rows.length ? mapArtisan(rows[0] as unknown as Record<string, unknown>) : null;
   }
   return store!.artisans.find((a) => a.email.toLowerCase() === email.toLowerCase() && !a.account_deleted_at) ?? null;
+}
+
+export async function hasDuplicateArtisanIdNumber(idNumber: string, excludedArtisanId: number): Promise<boolean> {
+  const normalized = idNumber.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!normalized) return false;
+  if (usingPostgres) {
+    const rows = await sql`
+      select id from artisans
+      where account_deleted_at is null and id <> ${excludedArtisanId}
+        and regexp_replace(upper(coalesce(id_number, '')), '[^A-Z0-9]', '', 'g') = ${normalized}
+      limit 1`;
+    return rows.length > 0;
+  }
+  return store!.artisans.some((artisan) =>
+    artisan.id !== excludedArtisanId &&
+    !artisan.account_deleted_at &&
+    (artisan.id_number ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '') === normalized,
+  );
 }
 
 export async function listPendingArtisans(): Promise<Artisan[]> {

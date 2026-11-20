@@ -12,6 +12,7 @@ import type {
   Product, Artisan, Order, OrderItem, Address, Report, ExperienceBooking,
   CustomerRow, ArtisanAnalytics,
 } from './types';
+import type { RuleResult } from './verificationRules';
 
 const DATABASE_URL = process.env.DATABASE_URL || '';
 export const usingPg = DATABASE_URL.length > 0;
@@ -89,6 +90,11 @@ function syncFromCore(): void {
 }
 
 function n(v: unknown): number { return typeof v === 'number' ? v : Number(v ?? 0); }
+
+function stringArray(v: unknown): string[] {
+  const parsed = parseJsonish<unknown>(v);
+  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+}
 
 export interface DeleteAccountResult {
   deleted: boolean;
@@ -359,7 +365,7 @@ export async function toggleCustomerStatus(id: number): Promise<void> {
 // ---------------------------------------------------------------------------
 // Artisans (admin deep review)
 // ---------------------------------------------------------------------------
-export async function getArtisanFull(id: number): Promise<(Artisan & { id_number?: string | null; dob?: string | null; id_document_path?: string | null; id_document_back_path?: string | null; proof_of_craft_path?: string | null }) | null> {
+export async function getArtisanFull(id: number): Promise<(Artisan & { id_number?: string | null; dob?: string | null; id_expiry_date?: string | null; id_expiry_checked?: boolean | null; id_document_path?: string | null; id_document_back_path?: string | null; proof_of_craft_path?: string | null }) | null> {
   syncFromCore();
   if (usingPg) {
     const rows = await sql`
@@ -370,7 +376,10 @@ export async function getArtisanFull(id: number): Promise<(Artisan & { id_number
         r.liveness_status,
         r.liveness_challenges,
         r.liveness_verified_at,
-        r.registration_notes as verification_registration_notes
+        r.registration_notes as verification_registration_notes,
+        r.verification_criteria,
+        r.verification_decision,
+        r.proof_of_craft_media_type
       from artisans a
       left join artisan_verification_results r on r.artisan_id = a.id
       where a.id = ${id} and a.account_deleted_at is null
@@ -379,13 +388,21 @@ export async function getArtisanFull(id: number): Promise<(Artisan & { id_number
     const row = rows[0] as unknown as Record<string, unknown>;
     return {
       ...row,
+      dob: row.dob == null ? null : tsString(row.dob)?.slice(0, 10) ?? null,
+      id_expiry_date: row.id_expiry_date == null ? null : tsString(row.id_expiry_date)?.slice(0, 10) ?? null,
+      id_expiry_checked: row.id_expiry_checked === true,
       face_matched: (row.verification_face_matched as boolean | null) ?? (row.face_matched as boolean | null) ?? null,
       face_confidence: (row.verification_face_confidence as number | null) ?? (row.face_confidence as number | null) ?? null,
       duplicate_face_match: (row.duplicate_face_match as boolean | null) ?? null,
       liveness_status: (row.liveness_status as Artisan['liveness_status']) ?? null,
-      liveness_challenges: (row.liveness_challenges as string[] | null) ?? null,
+      liveness_challenges: stringArray(row.liveness_challenges),
       liveness_verified_at: row.liveness_verified_at == null ? null : tsString(row.liveness_verified_at),
       registration_notes: (row.verification_registration_notes as string | null) ?? (row.registration_notes as string | null) ?? null,
+      verification_criteria: Array.isArray(parseJsonish<RuleResult[]>(row.verification_criteria))
+        ? parseJsonish<RuleResult[]>(row.verification_criteria) ?? []
+        : [],
+      verification_decision: row.verification_decision === 'auto_approved' ? 'auto_approved' : 'manual_review',
+      proof_of_craft_media_type: typeof row.proof_of_craft_media_type === 'string' ? row.proof_of_craft_media_type : null,
     } as Artisan & Record<string, unknown>;
   }
   const a = store().artisans.find((x) => x.id === id && !x.account_deleted_at);

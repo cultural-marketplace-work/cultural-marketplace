@@ -71,6 +71,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  const [submissionDecision, setSubmissionDecision] = useState<'auto_approved' | 'manual_review'>('manual_review');
   const [draftRestored, setDraftRestored] = useState(false);
 
   // OCR state
@@ -396,17 +397,17 @@ export default function ArtisanRegistrationForm({ applicant }: {
   // 3. Fast Automatic & Editable OCR Handler
   async function handleIdUpload(rawFile: File, side: 'front' | 'back') {
     setError('');
-    const shouldReadOcr = side === 'front';
-    if (shouldReadOcr) {
-      setOcrBusy(true);
-      setOcrHint('⚡ Compressing image for fast reading…');
-    } else {
-      setOcrHint('Compressing the back of your ID…');
-    }
+    setOcrBusy(true);
+    setOcrHint(`Compressing the ${side} of your ID…`);
     let workerPromise: Promise<Tesseract.Worker> | null = null;
     let imageReady = false;
 
     try {
+      setCachedOcr((prev) => {
+        const next = { ...(prev ?? {}) };
+        delete next[side];
+        return next;
+      });
       const compressed = await compressImage(rawFile, 1000, 1000, 0.75);
       if (compressed.size > 2 * 1024 * 1024) {
         throw new Error('The image is still too large after compression.');
@@ -424,18 +425,16 @@ export default function ArtisanRegistrationForm({ applicant }: {
         setIdBack(compressed);
         setIdBackPreview(dataUrl);
         imageReady = true;
-        setOcrHint('Back of ID attached. Enter any details that were not detected from the front manually.');
-        return;
       }
 
-      setOcrHint('Preparing on-device OCR…');
+      setOcrHint(`Preparing on-device OCR for the ${side}…`);
       workerPromise = ocrWorkerRef.current;
       if (!workerPromise) {
         workerPromise = import('tesseract.js').then(({ createWorker }) =>
           createWorker('eng', undefined, {
             logger: ({ status, progress }) => {
               if (status === 'recognizing text') {
-                setOcrHint(`Reading ID on this device… ${Math.round(progress * 100)}%`);
+                setOcrHint(`Reading the ${side} of your ID… ${Math.round(progress * 100)}%`);
               } else {
                 setOcrHint('Preparing on-device OCR…');
               }
@@ -460,8 +459,15 @@ export default function ArtisanRegistrationForm({ applicant }: {
         id_number: fields.id_number,
         dob: fields.dob,
         address: fields.address,
+        id_expiry_date: fields.id_expiry_date,
+        id_expiry_label_found: fields.id_expiry_label_found,
+        ocr_readable: fields.ocr_readable,
+        detected_id_type: fields.detected_id_type,
       };
-      setCachedOcr((prev) => ({ ...(prev || {}), [side]: applicantFields }));
+      const priorOcr: Partial<Record<'front' | 'back', OcrApplicantFields>> = { ...(cachedOcr ?? {}) };
+      delete priorOcr[side];
+      const combinedOcr = { ...priorOcr, [side]: applicantFields };
+      setCachedOcr(combinedOcr);
 
       setForm((prev) => ({
         ...prev,
@@ -479,45 +485,32 @@ export default function ArtisanRegistrationForm({ applicant }: {
       ].filter(Boolean);
 
       setOcrHint(itemsFound.length
-        ? `Auto-filled ${itemsFound.join(', ')}. Review and edit the details before continuing.`
-        : 'No applicant details were detected. You can enter them manually.');
+        ? `ID ${side} attached. Auto-filled ${itemsFound.join(', ')}.`
+        : `ID ${side} attached. OCR did not detect applicant details.`);
     } catch (error) {
       console.error(`ID ${side} image processing failed:`, error);
       if (!imageReady) {
         setError('This photo could not be prepared on this device. Try a smaller image or take a new picture.');
       }
       setOcrHint(imageReady
-        ? 'On-device OCR could not read this image. Please check the photo or enter the details manually.'
+        ? `ID ${side} attached, but OCR could not read it. An admin will need to review the ID.`
         : 'Could not prepare this image. Try a smaller photo or take a new picture.');
     } finally {
-      if (shouldReadOcr) {
-        setOcrBusy(false);
-        if (workerPromise && ocrWorkerRef.current === workerPromise) {
-          ocrWorkerRef.current = null;
-          void workerPromise
-            .then((worker) => worker.terminate())
-            .catch((error) => console.error('Could not stop the local OCR worker:', error));
+      if (workerPromise && ocrWorkerRef.current === workerPromise) {
+        ocrWorkerRef.current = null;
+        try {
+          const worker = await workerPromise;
+          await worker.terminate();
+        } catch (error) {
+          console.error('Could not stop the local OCR worker:', error);
         }
       }
+      setOcrBusy(false);
     }
   }
 
   async function submitDetails(e: React.FormEvent) {
     e.preventDefault();
-    if (!VALID_ARTISAN_ID_TYPES.some((idType) => idType === form.id_type)) {
-      setError('Choose a valid ID type before continuing.');
-      setStep('id');
-      return;
-    }
-    if (!idFront || !idBack) {
-      setError('Upload both sides of your government-issued ID before continuing.');
-      setStep('id');
-      return;
-    }
-    if (!form.location.trim()) {
-      setError('Enter the address shown on your ID. If OCR missed it, type it as printed.');
-      return;
-    }
     setBusy(true);
     setError('');
     try {
@@ -924,6 +917,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
       }
 
       if (data.status === 'success') {
+        setSubmissionDecision(data.verification_decision === 'auto_approved' ? 'auto_approved' : 'manual_review');
         setDone(true);
         setStep('done');
         localStorage.removeItem(draftStorageKey);
@@ -938,23 +932,28 @@ export default function ArtisanRegistrationForm({ applicant }: {
   }
 
   if (done) {
+    const automaticallyApproved = submissionDecision === 'auto_approved';
     if (applicant) {
       return (
         <main className="flex min-h-screen items-center justify-center bg-canvas px-3 py-8">
           <div className="mx-auto w-full max-w-[416px]">
             <ArtisanHeader step="done" compact />
             <section className="rounded-b-[18px] border-x border-b border-stone-300 bg-white px-6 py-6 text-center shadow-sm">
-              <CheckCircle2 size={30} className="mx-auto text-ochre-700" aria-hidden="true" />
-              <h2 className="mt-2 font-serif text-lg font-bold text-brand-900">Verification submitted</h2>
+              <CheckCircle2 size={30} className={`mx-auto ${automaticallyApproved ? 'text-green-700' : 'text-ochre-700'}`} aria-hidden="true" />
+              <h2 className="mt-2 font-serif text-lg font-bold text-brand-900">
+                {automaticallyApproved ? 'Account verified' : 'Verification submitted'}
+              </h2>
               <p className="mt-2 text-xs leading-relaxed text-stone-600">
-                Your account is registered. Artisan tools will remain unavailable until an administrator approves your application.
+                {automaticallyApproved
+                  ? 'All verification criteria passed. Your artisan tools are now available.'
+                  : 'One or more checks need attention. Your application is waiting for manual admin review.'}
               </p>
               <p className="mt-3 text-[10px] text-stone-500">
-                {faceResult === 'match' ? 'Your face matched your ID.' : 'An admin will review your documents manually.'}
+                {automaticallyApproved ? 'Your identity checks passed automatically.' : 'An admin will review the submitted documents and flagged criteria.'}
               </p>
               <p className="mt-4 rounded-lg border border-ochre-200 bg-ochre-50 p-3 text-xs text-ochre-900">
                 Account Status: <b>Registered</b><br />
-                Artisan Status: <b>Pending Review</b>
+                Artisan Status: <b>{automaticallyApproved ? 'Verified' : 'Pending Manual Review'}</b>
               </p>
               <Link
                 href="/artisan/dashboard"
@@ -972,16 +971,20 @@ export default function ArtisanRegistrationForm({ applicant }: {
       <main className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
         <div className="card w-full max-w-md p-8 text-center">
           <div className="text-4xl">🧵</div>
-          <h1 className="mt-3 font-serif text-2xl font-bold text-brand-900">Verification submitted</h1>
+          <h1 className="mt-3 font-serif text-2xl font-bold text-brand-900">
+            {automaticallyApproved ? 'Account verified' : 'Verification submitted'}
+          </h1>
           <p className="mt-2 text-sm text-stone-600">
-            Your artisan verification is awaiting administrator review. Your account is registered, and artisan tools will remain disabled until your application is approved.
+            {automaticallyApproved
+              ? 'All verification criteria passed. Your artisan tools are now available.'
+              : 'One or more checks need attention. Your application is waiting for manual admin review.'}
           </p>
           <p className="mt-3 text-xs text-stone-400">
-            {faceResult === 'match' ? '✅ Your face was automatically verified against your ID.' : 'An admin will review your documents manually.'}
+            {automaticallyApproved ? 'All automated identity checks passed.' : 'An admin will review the submitted documents and flagged criteria.'}
           </p>
           <p className="mt-4 rounded-lg border border-ochre-200 bg-ochre-50 p-3 text-sm text-ochre-900">
             Account Status: <b>Registered</b><br />
-            Artisan Status: <b>Pending Review</b>
+            Artisan Status: <b>{automaticallyApproved ? 'Verified' : 'Pending Manual Review'}</b>
           </p>
           <Link href="/artisan/dashboard" className="btn-primary mt-6 inline-block">Go to my artisan account</Link>
         </div>
@@ -1418,7 +1421,6 @@ export default function ArtisanRegistrationForm({ applicant }: {
               <label className={compactIdVerification ? 'sr-only' : 'block text-sm font-medium text-stone-700'} htmlFor="id_type">Valid ID type</label>
               <select
                 id="id_type"
-                required
                 className={compactIdVerification
                   ? 'h-6 w-full rounded-[4px] border border-crimson-600 bg-white px-2 text-[10px] text-stone-700 focus:outline-none focus:ring-1 focus:ring-crimson-600'
                   : inputClass}
@@ -1456,6 +1458,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
                     <button
                       type="button"
                       className="mt-1 text-[11px] text-stone-400 underline hover:text-red-600"
+                      disabled={ocrBusy}
                       onClick={() => { setIdFront(null); setIdFrontPreview(''); if (frontRef.current) frontRef.current.value = ''; }}
                     >
                       Change
@@ -1493,6 +1496,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
                       className={compactIdVerification
                         ? 'mt-1 w-full rounded border border-ochre-500 px-1 py-1 text-[9px] text-stone-600 transition hover:bg-ochre-50'
                         : 'btn-outline w-full py-1.5 text-xs'}
+                      disabled={ocrBusy}
                       onClick={() => frontRef.current?.click()}
                     >
                       Upload Front of ID
@@ -1523,6 +1527,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
                     <button
                       type="button"
                       className="mt-1 text-[11px] text-stone-400 underline hover:text-red-600"
+                      disabled={ocrBusy}
                       onClick={() => { setIdBack(null); setIdBackPreview(''); if (backRef.current) backRef.current.value = ''; }}
                     >
                       Change
@@ -1559,6 +1564,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
                       className={compactIdVerification
                         ? 'mt-1 w-full rounded border border-ochre-500 px-1 py-1 text-[9px] text-stone-600 transition hover:bg-ochre-50'
                         : 'btn-outline w-full py-1.5 text-xs'}
+                      disabled={ocrBusy}
                       onClick={() => backRef.current?.click()}
                     >
                       Upload Back of ID
@@ -1605,7 +1611,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
               <button
                 type="button"
                 className={compactIdVerification ? compactWidePrimaryButton : 'btn-primary w-full py-3 font-bold'}
-                disabled={!form.id_type || !idFront || !idBack || ocrBusy}
+                disabled={ocrBusy}
                 onClick={() => { setError(''); setStep('details'); }}
               >
                 {compactIdVerification ? 'Upload' : 'Continue to Applicant Details →'}
@@ -1700,7 +1706,6 @@ export default function ArtisanRegistrationForm({ applicant }: {
                 <input
                   id="location"
                   type="text"
-                  required
                   className={inputClass}
                   placeholder="Enter the address as printed on your ID"
                   value={form.location}
@@ -2052,7 +2057,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
             <button
               type="button"
               className={compactVerification ? compactWidePrimaryButton : 'btn-primary py-3 font-bold'}
-              disabled={!selfie || faceResult === 'matching'}
+              disabled={faceResult === 'matching'}
               onClick={() => { stopCamera(); setError(''); setStep('credentials'); }}
             >
               Continue to Affiliation &amp; Craft →
@@ -2067,14 +2072,13 @@ export default function ArtisanRegistrationForm({ applicant }: {
           <section className="space-y-4">
             <h2 className="font-semibold text-stone-800">Stage 4: Indigenous Affiliation &amp; Craft Credentials</h2>
             <p className="text-xs text-stone-500">
-              Provide your community affiliation and a supporting document (such as a community endorsement or certificate). Authorized admins review this information; applications remain pending until approval.
+              Provide your community affiliation and, if available, supporting evidence. Missing or uncertain information will be sent for admin review.
             </p>
             <div>
               <label className={labelClass} htmlFor="indigenous_affiliation">Indigenous community / affiliation</label>
               <input
                 id="indigenous_affiliation"
                 type="text"
-                required
                 maxLength={200}
                 className={inputClass}
                 placeholder="Community or affiliation name"
@@ -2087,7 +2091,6 @@ export default function ArtisanRegistrationForm({ applicant }: {
               <input
                 id="craft_type"
                 type="text"
-                required
                 maxLength={100}
                 className={inputClass}
                 placeholder="Traditional Uway Basket Weaving"
@@ -2096,7 +2099,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
               />
             </div>
             <div>
-              <label className={labelClass} htmlFor="business_name">Shop / workshop name (optional)</label>
+              <label className={labelClass} htmlFor="business_name">Shop / workshop name</label>
               <input
                 id="business_name"
                 type="text"
@@ -2159,7 +2162,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
           <div className="border-t border-stone-200 pt-5">
             <h3 className="font-semibold text-stone-800">Craft production evidence &amp; samples</h3>
             <p className="mt-1 text-xs text-stone-500">
-              Attach a photo of you crafting/workshop tools and 2 samples of your authentic products.
+              Attach a readable photo or video of your craft and two distinct product samples.
             </p>
 
             <div className="mt-3 grid grid-cols-3 gap-3">
@@ -2169,9 +2172,14 @@ export default function ArtisanRegistrationForm({ applicant }: {
   ['sample2', s2Ref, sample2, setSample2, s2Preview, setS2Preview, 'Sample', 'Product Sample 2'],
 ] as const).map(([side, ref, file, setFile, preview, setPreview, icon, label]) => (
                 <div key={side} className="rounded-xl border-2 border-dashed border-stone-200 p-2 text-center">
-                  {preview ? (
+                  {preview || (side === 'proof' && file) ? (
                     <div>
-                      <img src={preview} alt={label} className="mx-auto h-16 rounded object-cover" />
+                      {side === 'proof' && file?.type.startsWith('video/')
+                        ? <div className="flex h-16 items-center justify-center rounded bg-stone-900 text-xs font-semibold text-white">Video attached</div>
+                        : <img src={preview} alt={label} className="mx-auto h-16 rounded object-cover" />}
+                      {side === 'proof' && file?.type.startsWith('video/') && (
+                        <p className="mt-1 truncate text-[10px] text-stone-500">{file.name}</p>
+                      )}
                       <p className="mt-1 text-xs text-ochre-800 font-bold">✓</p>
                       <button
                         type="button"
@@ -2198,16 +2206,21 @@ export default function ArtisanRegistrationForm({ applicant }: {
                   <input
                     ref={ref}
                     type="file"
-                    accept="image/*"
+                    accept={side === 'proof' ? 'image/*,video/mp4,video/webm' : 'image/*'}
                     capture="environment"
                     className="hidden"
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
                       if (f) {
-                        const compressed = await compressImage(f, 1200, 1200, 0.8);
-                        const dataUrl = await fileToDataUrl(compressed);
-                        setFile(compressed);
-                        setPreview(dataUrl);
+                        if (side === 'proof' && f.type.startsWith('video/')) {
+                          setFile(f);
+                          setPreview('');
+                        } else {
+                          const compressed = await compressImage(f, 1200, 1200, 0.8);
+                          const dataUrl = await fileToDataUrl(compressed);
+                          setFile(compressed);
+                          setPreview(dataUrl);
+                        }
                       }
                     }}
                   />
@@ -2225,14 +2238,14 @@ export default function ArtisanRegistrationForm({ applicant }: {
                 className={compactVerification
                   ? `${compactWidePrimaryButton} shadow-sm`
                   : 'btn-primary py-3 font-bold shadow-md'}
-                disabled={busy || !idFront || !idBack || !selfie || !affiliationProof || !proofCraft || !sample1 || !sample2}
+                disabled={busy}
                 type="submit"
               >
-                {busy ? 'Submitting application… ' : 'Submit for Admin Review →'}
+                {busy ? 'Submitting application… ' : 'Submit Verification →'}
               </button>
             </div>
             <p className="mt-2 text-center text-xs text-stone-400">
-              Your evidence is private and will be reviewed by an admin. Your application is not automatically approved.
+              All 14 checks are evaluated automatically. Any failed or uncertain check is sent to an admin for manual review.
             </p>
           </div>
             </>

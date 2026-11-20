@@ -166,6 +166,8 @@ export interface Artisan {
   id_number?: string | null;
   dob?: string | null;
   id_type?: string | null;
+  id_expiry_date?: string | null;
+  id_expiry_checked?: boolean | null;
   id_document_path?: string | null;
   id_document_back_path?: string | null;
   indigenous_affiliation?: string | null;
@@ -173,6 +175,9 @@ export interface Artisan {
   proof_of_craft_path?: string | null;
   product_sample_1_path?: string | null;
   product_sample_2_path?: string | null;
+  verification_criteria?: Array<{ id: string; label: string; status: 'pass' | 'fail' | 'review'; detail: string }>;
+  verification_decision?: 'auto_approved' | 'manual_review';
+  proof_of_craft_media_type?: string | null;
 }
 
 export interface Order {

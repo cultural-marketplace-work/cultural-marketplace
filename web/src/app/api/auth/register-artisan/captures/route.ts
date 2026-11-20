@@ -1,19 +1,23 @@
+import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import sharp from 'sharp';
 import {
   appendArtisanRegistrationNote,
   createArtisan,
   getArtisanByEmail,
+  hasDuplicateArtisanIdNumber,
   logActivity,
+  pushNotification,
 } from '@/lib/db';
 
 import { getSession } from '@/lib/auth';
 import { openPending } from '@/lib/pendingToken';
 import type { OcrApplicantFields } from '@/lib/ocrFields';
-import { VALID_ARTISAN_ID_TYPES } from '@/lib/validArtisanIdTypes';
-import { verifyFace, checkDuplicateFace } from '@/lib/faceVerify';
 import { faceEmbeddingEncryptionConfigured, listFaceEmbeddings, saveFaceEmbedding } from '@/lib/faceEmbeddings';
 import { logFaceAttempt } from '@/lib/faceLogs';
 import { uploadFile } from '@/lib/storage';
+import { compareHumanFaces, findDuplicateHumanEmbedding } from '@/lib/humanFaceVerification';
+import { evaluateVerificationRules, verificationDecision } from '@/lib/verificationRules';
 
 // In-memory pending-artisan handoff shared with ../route.ts.s
 declare global {
@@ -26,7 +30,7 @@ export const maxDuration = 60;
 function readOcrFields(value: unknown): OcrApplicantFields | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const fields = value as Record<string, unknown>;
-  const read = (key: keyof OcrApplicantFields, maxLength: number) => {
+  const read = (key: 'full_name' | 'id_number' | 'dob' | 'address' | 'id_expiry_date' | 'detected_id_type', maxLength: number) => {
     const field = fields[key];
     return typeof field === 'string' && field.trim() ? field.trim().slice(0, maxLength) : null;
   };
@@ -35,6 +39,10 @@ function readOcrFields(value: unknown): OcrApplicantFields | undefined {
     id_number: read('id_number', 40),
     dob: read('dob', 10),
     address: read('address', 200),
+    id_expiry_date: read('id_expiry_date', 10),
+    id_expiry_label_found: fields.id_expiry_label_found === true,
+    ocr_readable: fields.ocr_readable === true,
+    detected_id_type: read('detected_id_type', 80),
   };
   return Object.values(result).some(Boolean) ? result : undefined;
 }
@@ -56,6 +64,38 @@ function parseOcrData(value: FormDataEntryValue | null): { front?: OcrApplicantF
 }
 
 const REQUIRED_LIVENESS_CHALLENGES = ['blink_twice', 'turn_both_sides'] as const;
+
+function readFile(value: FormDataEntryValue | null): File | null {
+  return value instanceof File && value.size > 0 ? value : null;
+}
+
+async function isReadableImage(file: File | null, buffer: ArrayBuffer | null): Promise<boolean> {
+  if (!file || !file.type.startsWith('image/') || !buffer) return false;
+  try {
+    const metadata = await sharp(Buffer.from(buffer), { limitInputPixels: 20_000_000 }).metadata();
+    return Boolean(metadata.width && metadata.height);
+  } catch {
+    return false;
+  }
+}
+
+function contentHash(buffer: ArrayBuffer | null): string | null {
+  return buffer ? createHash('sha256').update(Buffer.from(buffer)).digest('hex') : null;
+}
+
+function isDuplicateIdConflict(error: unknown): boolean {
+  return typeof error === 'object' && error !== null &&
+    'code' in error && error.code === '23505' &&
+    'constraint' in error && error.constraint === 'artisans_id_number_key';
+}
+
+async function safeLogFaceAttempt(entry: Parameters<typeof logFaceAttempt>[0]): Promise<void> {
+  try {
+    await logFaceAttempt(entry);
+  } catch (error) {
+    console.error('[artisan-verification] face audit log failed:', error instanceof Error ? error.message : error);
+  }
+}
 
 function parseLivenessResult(value: FormDataEntryValue | null, expectedOrder: string[]): {
   status: 'passed' | 'manual_review';
@@ -116,54 +156,33 @@ export async function POST(req: Request) {
     }
 
     const idType = (d.id_type ?? '').trim();
-    if (!VALID_ARTISAN_ID_TYPES.some((acceptedType) => acceptedType === idType)) {
-      return NextResponse.json({ status: 'error', message: 'Select an accepted ID type before submitting.' }, { status: 400 });
-    }
-    if (!(d.location ?? '').trim()) {
-      return NextResponse.json({ status: 'error', message: 'The address shown on your ID is required.' }, { status: 400 });
-    }
-
-    const idFrontValue = form.get('id_front');
-    const idBackValue = form.get('id_back');
-    if (
-      !(idFrontValue instanceof File) || idFrontValue.size === 0 || !idFrontValue.type.startsWith('image/') ||
-      !(idBackValue instanceof File) || idBackValue.size === 0 || !idBackValue.type.startsWith('image/')
-    ) {
-      return NextResponse.json({ status: 'error', message: 'Upload image files of both sides of your selected ID.' }, { status: 400 });
-    }
-    const idFront = idFrontValue;
-    const idBack = idBackValue;
-    const selfie = form.get('selfie') as File | null;
-    // Deterministic verification rules R4-R6: proof of craft production and at
-    // least two product samples are REQUIRED — registration is refused without them.
-    const proofCraft = form.get('proof_of_craft') as File | null;
-    const sample1 = form.get('product_sample_1') as File | null;
-    const sample2 = form.get('product_sample_2') as File | null;
-    const affiliationProof = form.get('affiliation_proof') as File | null;
+    const idFront = readFile(form.get('id_front'));
+    const idBack = readFile(form.get('id_back'));
+    const selfie = readFile(form.get('selfie'));
+    const proofUpload = readFile(form.get('proof_of_craft'));
+    const proofCraft = proofUpload &&
+      (proofUpload.type.startsWith('image/') || ['video/mp4', 'video/webm'].includes(proofUpload.type))
+      ? proofUpload
+      : null;
+    const sample1 = readFile(form.get('product_sample_1'));
+    const sample2 = readFile(form.get('product_sample_2'));
+    const affiliationProof = readFile(form.get('affiliation_proof'));
     const indigenousAffiliation = String(form.get('indigenous_affiliation') ?? d.indigenous_affiliation ?? '').trim();
     const craftType = String(form.get('craft_type') ?? d.craft_type ?? '').trim();
     const businessName = String(form.get('business_name') ?? d.business_name ?? '').trim();
-    if (!selfie) {
-      return NextResponse.json({ status: 'error', message: 'A live selfie is required.' }, { status: 400 });
-    }
-    if (!proofCraft || !sample1 || !sample2) {
-      return NextResponse.json({ status: 'error', message: 'Proof of craft production and two product samples are required for verification.' }, { status: 400 });
-    }
-    if (!indigenousAffiliation || !affiliationProof || !craftType) {
-      return NextResponse.json({ status: 'error', message: 'Indigenous affiliation, affiliation evidence, and craft specialization are required.' }, { status: 400 });
-    }
     if (indigenousAffiliation.length > 200 || craftType.length > 100 || businessName.length > 100) {
       return NextResponse.json({ status: 'error', message: 'Affiliation or craft details exceed the allowed length.' }, { status: 400 });
     }
-    for (const f of [idFront, idBack, selfie, affiliationProof, proofCraft, sample1, sample2]) {
-      if (f.size > 8 * 1024 * 1024) return NextResponse.json({ status: 'error', message: 'Each image must be under 8 MB.' }, { status: 400 });
+    const uploadedFiles = [idFront, idBack, selfie, affiliationProof, proofCraft, sample1, sample2]
+      .filter((file): file is File => Boolean(file));
+    if (uploadedFiles.some((file) => file.size > 8 * 1024 * 1024)) {
+      return NextResponse.json({ status: 'error', message: 'Each uploaded file must be under 8 MB.' }, { status: 413 });
     }
 
     const notes: string[] = [];
-    const warnings: string[] = [];
     const expectedChallengeOrder = (d.liveness_challenge_order ?? '').split(',');
     const liveness = parseLivenessResult(form.get('liveness_result'), expectedChallengeOrder);
-    await logFaceAttempt({
+    await safeLogFaceAttempt({
       email: d.email,
       result: liveness.status === 'passed' ? 'liveness_passed' : 'liveness_failed',
       detail: {
@@ -176,101 +195,125 @@ export async function POST(req: Request) {
     });
     if (liveness.status !== 'passed') {
       notes.push('Active liveness challenges were not completed; admin must review the selfie manually.');
-      warnings.push('Active liveness was not verified. An admin will review the application.');
     }
 
     const [idFrontBuf, idBackBuf, selfieBuf, affiliationBuf, proofBuf, s1Buf, s2Buf] = await Promise.all([
-      idFront.arrayBuffer(), idBack.arrayBuffer(), selfie.arrayBuffer(),
-      affiliationProof.arrayBuffer(), proofCraft.arrayBuffer(), sample1.arrayBuffer(), sample2.arrayBuffer(),
+      idFront?.arrayBuffer() ?? null,
+      idBack?.arrayBuffer() ?? null,
+      selfie?.arrayBuffer() ?? null,
+      affiliationProof?.arrayBuffer() ?? null,
+      proofCraft?.arrayBuffer() ?? null,
+      sample1?.arrayBuffer() ?? null,
+      sample2?.arrayBuffer() ?? null,
     ]);
 
     const preOcr = parseOcrData(form.get('ocr_data'));
-    if (preOcr.front || preOcr.back) {
-      notes.push('Applicant details were extracted by on-device OCR; results are advisory and require admin review.');
+    const ocrSides = [preOcr.front, preOcr.back].filter(
+      (side): side is OcrApplicantFields => Boolean(side),
+    );
+    const expiryDates = [...new Set(ocrSides.map((side) => side.id_expiry_date).filter((date): date is string => Boolean(date)))];
+    const expiryLabelFound = ocrSides.some((side) => side.id_expiry_label_found);
+    const noExpiryDisplayed = ocrSides.length === 2 &&
+      ocrSides.every((side) => side.ocr_readable) &&
+      !expiryLabelFound;
+    const idExpiryDate = expiryDates.length === 1 ? expiryDates[0] : null;
+    const idExpiryChecked = expiryDates.length === 1 || (expiryDates.length === 0 && noExpiryDisplayed);
+    if (expiryDates.length > 1) {
+      notes.push('OCR found conflicting ID expiration dates; an admin must review the document.');
     }
 
-    const verify = await verifyFace(idFrontBuf, selfieBuf);
-    if (preOcr.front?.id_number) {
-      const found = preOcr.front.id_number.replace(/[\s-]/g, '').toUpperCase();
-      const given = (d.id_number ?? '').replace(/[\s-]/g, '').toUpperCase();
-      if (given && found !== given) {
-        notes.push('On-device OCR read an ID number that differs from the applicant-entered number.');
+    let verify: Awaited<ReturnType<typeof compareHumanFaces>> | { status: 'error'; message: string };
+    if (idFrontBuf && selfieBuf) {
+      try {
+        verify = await compareHumanFaces(idFrontBuf, selfieBuf);
+      } catch (cause) {
+        verify = { status: 'error', message: cause instanceof Error ? cause.message : 'Unknown Human.js error.' };
       }
+    } else {
+      verify = { status: 'error', message: 'ID front or selfie was not submitted.' };
     }
 
-    // ---- Face verification (result from the parallel block above) ----
     let faceMatch: boolean | null = null;
     let selfieEmbedding: number[] | null = null;
     let faceConfidence: number | null = null;
     if (verify.status === 'ok') {
-      faceMatch = verify.data.match;
-      faceConfidence = verify.data.confidence;
-      selfieEmbedding = verify.data.selfie_embedding;
-      if (!verify.data.match) {
-        await logFaceAttempt({ email: d.email, result: 'no_match', distance: verify.data.distance, confidence: verify.data.confidence, detail: { step: 'verify' } });
-        notes.push(`Face auto-match score ${Math.round(verify.data.confidence * 100)}% (distance ${verify.data.distance}) — submitted for manual admin review.`);
-        warnings.push('Automatic face check did not reach the confidence threshold; an admin will review your photos manually.');
+      faceMatch = verify.match;
+      faceConfidence = verify.similarity;
+      if (verify.match) selfieEmbedding = verify.selfie_embedding;
+      if (!verify.match) {
+        await safeLogFaceAttempt({ email: d.email, result: 'no_match', distance: verify.distance, confidence: verify.similarity, detail: { step: 'verify', model: 'human.js' } });
+        notes.push(`Human.js face match score ${Math.round(verify.similarity * 100)}% — submitted for manual admin review.`);
       } else {
-        await logFaceAttempt({ email: d.email, result: 'match', distance: verify.data.distance, confidence: verify.data.confidence, detail: { step: 'verify' } });
+        await safeLogFaceAttempt({ email: d.email, result: 'match', distance: verify.distance, confidence: verify.similarity, detail: { step: 'verify', model: 'human.js' } });
       }
     } else if (verify.status === 'error') {
-      await logFaceAttempt({ email: d.email, result: 'error', detail: { step: 'verify', message: verify.message } });
-      notes.push(`Face check issue (${verify.message}) — submitted for manual admin review.`);
-      warnings.push('Automatic face check could not complete; an admin will verify your documents manually.');
-    } else {
-      notes.push('Face service not configured — submitted for manual admin review.');
+      await safeLogFaceAttempt({ email: d.email, result: 'error', detail: { step: 'verify', message: verify.message } });
+      notes.push('Human.js face check could not complete; admin review is required.');
+    } else if (verify.status === 'no_face') {
+      await safeLogFaceAttempt({ email: d.email, result: 'error', detail: { step: 'verify', message: verify.message } });
+      notes.push(`Human.js could not verify the ID/selfie (${verify.message}) — submitted for manual admin review.`);
     }
 
-    // ---- 3. Duplicate-face check against existing artisans ----
     let duplicateOf: number | null = null;
     let duplicateFaceMatch: boolean | null = null;
     if (selfieEmbedding) {
       if (!faceEmbeddingEncryptionConfigured()) {
-        await logFaceAttempt({
+        await safeLogFaceAttempt({
           email: d.email,
           result: 'error',
           detail: { step: 'duplicate', message: 'No biometric-template encryption secret is configured.' },
         });
         notes.push('Secure duplicate-face check was unavailable; admin must review the selfie manually.');
-        warnings.push('Secure duplicate-face check could not complete. An admin will review the application.');
         selfieEmbedding = null;
       } else try {
         const stored = await listFaceEmbeddings();
-        const dup = await checkDuplicateFace(selfieBuf, stored);
-        if (dup.status === 'ok') {
-          duplicateFaceMatch = dup.data.is_duplicate;
-          if (dup.data.is_duplicate) {
-            duplicateOf = dup.data.matched_artisan_id;
-            await logFaceAttempt({ email: d.email, artisanId: duplicateOf, result: 'duplicate', distance: dup.data.distance, detail: { step: 'duplicate' } });
-            return NextResponse.json({ status: 'error', message: 'This face is already registered to another artisan account.' }, { status: 409 });
-          }
-          await logFaceAttempt({ email: d.email, result: 'not_duplicate', distance: dup.data.distance, detail: { step: 'duplicate' } });
+        const duplicate = await findDuplicateHumanEmbedding(selfieEmbedding, stored, existingArtisan.id);
+        duplicateFaceMatch = Boolean(duplicate);
+        if (duplicate) {
+          duplicateOf = duplicate.artisanId;
+          await safeLogFaceAttempt({ email: d.email, artisanId: duplicateOf, result: 'duplicate', confidence: duplicate.similarity, detail: { step: 'duplicate', model: 'human.js' } });
+          notes.push('A possible duplicate face was found; admin review is required.');
         } else {
-          await logFaceAttempt({
+          await safeLogFaceAttempt({
             email: d.email,
-            result: dup.status,
-            detail: { step: 'duplicate', ...(dup.status === 'error' ? { message: dup.message } : {}) },
+            result: 'not_duplicate',
+            detail: { step: 'duplicate', model: 'human.js' },
           });
-          notes.push('Duplicate-face check was unavailable; admin must review the selfie manually.');
-          warnings.push('Duplicate-face check could not complete. An admin will review the application.');
         }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : 'Unknown biometric template error.';
-        await logFaceAttempt({ email: d.email, result: 'error', detail: { step: 'duplicate', message } });
+        await safeLogFaceAttempt({ email: d.email, result: 'error', detail: { step: 'duplicate', message } });
         notes.push('Secure duplicate-face check was unavailable; admin must review the selfie manually.');
-        warnings.push('Secure duplicate-face check could not complete. An admin will review the application.');
       }
     } else {
-      await logFaceAttempt({
+      await safeLogFaceAttempt({
         email: d.email,
-        result: verify.status === 'skipped' ? 'skipped' : 'error',
-        detail: { step: 'duplicate', reason: 'face_embedding_unavailable' },
+        result: verify.status === 'error' ? 'error' : 'skipped',
+        detail: { step: 'duplicate', reason: 'human_face_embedding_unavailable' },
       });
-      notes.push('Duplicate-face check was skipped; admin must review the selfie manually.');
-      warnings.push('Duplicate-face check was skipped. An admin will review the application.');
     }
 
-    // ---- 4. Store verification documents (skipped without Storage keys) ----
+    const normalizedIdNumber = (preOcr.front?.id_number ?? preOcr.back?.id_number ?? d.id_number ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    let duplicateId: boolean | null = null;
+    if (normalizedIdNumber) {
+      try {
+        duplicateId = await hasDuplicateArtisanIdNumber(normalizedIdNumber, existingArtisan.id);
+      } catch (error) {
+        console.error('[artisan-verification] duplicate ID check failed:', error instanceof Error ? error.message : error);
+        notes.push('Duplicate ID check could not be completed; admin review is required.');
+      }
+    }
+
+    const [idFrontReadable, idBackReadable, proofReadable, sample1Readable, sample2Readable] = await Promise.all([
+      isReadableImage(idFront, idFrontBuf),
+      isReadableImage(idBack, idBackBuf),
+      proofCraft?.type.startsWith('image/') ? isReadableImage(proofCraft, proofBuf) : Promise.resolve(false),
+      isReadableImage(sample1, s1Buf),
+      isReadableImage(sample2, s2Buf),
+    ]);
+
     let idFrontPath: string | null = null;
     let idBackPath: string | null = null;
     let selfiePath: string | null = null;
@@ -279,86 +322,197 @@ export async function POST(req: Request) {
     let s1Path: string | null = null;
     let s2Path: string | null = null;
     const safeEmail = (d.email ?? 'applicant').replace(/[^a-z0-9]/gi, '_');
+    const uploadOne = async (file: File | null, buffer: ArrayBuffer | null, name: string): Promise<string | null> => {
+      if (!file || !buffer) return null;
+      try {
+        const result = await uploadFile(
+          'verification-docs',
+          `${safeEmail}/${Date.now()}-${name}`,
+          buffer,
+          file.type || 'application/octet-stream',
+        );
+        return result.path;
+      } catch (error) {
+        console.error(`[artisan-verification] ${name} upload failed:`, error instanceof Error ? error.message : error);
+        notes.push(`${name} could not be stored; admin review is required.`);
+        return null;
+      }
+    };
+    [idFrontPath, idBackPath, selfiePath, affiliationPath, proofPath, s1Path, s2Path] = await Promise.all([
+      uploadOne(idFront, idFrontBuf, 'id-front'),
+      uploadOne(idBack, idBackBuf, 'id-back'),
+      uploadOne(selfie, selfieBuf, 'selfie'),
+      uploadOne(affiliationProof, affiliationBuf, 'affiliation-proof'),
+      uploadOne(proofCraft, proofBuf, 'proof-of-craft'),
+      uploadOne(sample1, s1Buf, 'product-sample-1'),
+      uploadOne(sample2, s2Buf, 'product-sample-2'),
+    ]);
+
+    const detectedTypes = [...new Set(
+      [preOcr.front?.detected_id_type, preOcr.back?.detected_id_type].filter((value): value is string => Boolean(value)),
+    )];
+    const detectedIdType = detectedTypes.length === 1 ? detectedTypes[0] : null;
+    const idDocumentsReadable = Boolean(
+      idFrontPath && idBackPath &&
+      idFrontReadable && idBackReadable &&
+      preOcr.front?.ocr_readable && preOcr.back?.ocr_readable,
+    );
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    const idExpiryStatus = idExpiryDate
+      ? idExpiryDate < today ? 'expired' as const : 'valid' as const
+      : idExpiryChecked ? 'valid' as const : 'unknown' as const;
+    const sampleHashes = [contentHash(s1Buf), contentHash(s2Buf)];
+    const productSamplesStatus = Boolean(
+      s1Path && s2Path && sample1Readable && sample2Readable &&
+      sampleHashes[0] && sampleHashes[1] && sampleHashes[0] !== sampleHashes[1],
+    ) ? 'pass' as const : 'fail' as const;
+    const proofOfCraftStatus = Boolean(
+      proofPath && proofCraft?.type.startsWith('image/') && proofReadable,
+    ) ? 'pass' as const : 'review' as const;
+    const extractedDob = preOcr.front?.dob ?? preOcr.back?.dob ?? null;
+    const selectedIdNumber = preOcr.front?.id_number ?? preOcr.back?.id_number ?? d.id_number ?? '';
+    let verificationCriteria = evaluateVerificationRules({
+      idType,
+      detectedIdType,
+      idDocumentsReadable,
+      idExpiryStatus,
+      ocrFront: preOcr.front,
+      ocrBack: preOcr.back,
+      accountName: d.name,
+      enteredIdNumber: d.id_number,
+      duplicateId,
+      livenessPassed: liveness.status === 'passed',
+      faceMatched: faceMatch,
+      duplicateFaceMatch,
+      dob: extractedDob ?? d.dob,
+      dobFromOcr: Boolean(extractedDob),
+      idAddress: d.location?.trim() || preOcr.front?.address || preOcr.back?.address || null,
+      proofOfCraftStatus,
+      productSamplesStatus,
+      craftType,
+      businessName,
+      indigenousAffiliation,
+    });
+    let decision = verificationDecision(verificationCriteria);
+    let verificationStatus: 'approved' | 'pending' = decision === 'auto_approved' ? 'approved' : 'pending';
+    const makeRegistrationNotes = () => {
+      const reviewReasons = verificationCriteria
+        .filter((criterion) => criterion.status !== 'pass')
+        .map((criterion) => `${criterion.id}: ${criterion.detail}`);
+      return [...notes, ...reviewReasons].join(' ') || null;
+    };
+    let registrationNotes = makeRegistrationNotes();
+    const createApplication = (idNumber: string) => createArtisan({
+      name: d.name ?? '',
+      email: d.email ?? '',
+      password: '',
+      phone: d.phone ?? '',
+      location: (d.location ?? preOcr.front?.address ?? preOcr.back?.address ?? '').trim(),
+      craft_type: craftType,
+      business_name: businessName,
+      id_number: idNumber,
+      dob: extractedDob ?? d.dob,
+      id_expiry_date: idExpiryDate,
+      id_expiry_checked: idExpiryChecked,
+      id_type: idType,
+      indigenous_affiliation: indigenousAffiliation,
+      affiliation_document_path: affiliationPath,
+      id_document_path: idFrontPath,
+      id_document_back_path: idBackPath,
+      proof_of_craft_path: proofPath,
+      product_sample_1_path: s1Path,
+      product_sample_2_path: s2Path,
+      selfie_path: selfiePath,
+      face_matched: faceMatch,
+      face_confidence: faceConfidence,
+      duplicate_face_match: duplicateFaceMatch,
+      liveness_status: liveness.status,
+      liveness_challenges: liveness.completed,
+      liveness_verified_at: liveness.status === 'passed' ? new Date().toISOString() : null,
+      registration_notes: registrationNotes,
+      verification_criteria: verificationCriteria,
+      verification_decision: decision,
+      verification_status: verificationStatus,
+      proof_of_craft_media_type: proofPath ? proofCraft?.type ?? null : null,
+    });
+
+    let artisanId: number;
     try {
-      const up = async (f: File, buf: ArrayBuffer, name: string) => {
-        const r = await uploadFile('verification-docs', `${safeEmail}/${Date.now()}-${name}`, buf, f.type || 'image/jpeg');
-        return r.path;
-      };
-      [idFrontPath, idBackPath, selfiePath, affiliationPath, proofPath, s1Path, s2Path] = await Promise.all([
-        up(idFront, idFrontBuf, 'id-front'),
-        up(idBack, idBackBuf, 'id-back'),
-        up(selfie, selfieBuf, 'selfie'),
-        up(affiliationProof, affiliationBuf, 'affiliation-proof'),
-        up(proofCraft, proofBuf, 'proof-of-craft'),
-        up(sample1, s1Buf, 'product-sample-1'),
-        up(sample2, s2Buf, 'product-sample-2'),
-      ]);
-      if (!idFrontPath) notes.push('File storage not configured - documents not retained; admin will request them separately.');
-    } catch (e) {
-      notes.push('Document upload failed; an admin may contact you for re-submission.');
-      if (e instanceof Error) notes.push(`(${e.message})`);
+      artisanId = await createApplication(duplicateId === false ? selectedIdNumber : '');
+    } catch (error) {
+      if (!isDuplicateIdConflict(error) || duplicateId !== false) throw error;
+      duplicateId = true;
+      verificationCriteria = verificationCriteria.map((criterion) => criterion.id === '5'
+        ? {
+          ...criterion,
+          status: 'fail',
+          detail: 'ID number was registered concurrently by another artisan account',
+        }
+        : criterion);
+      decision = 'manual_review';
+      verificationStatus = 'pending';
+      registrationNotes = makeRegistrationNotes();
+      artisanId = await createApplication('');
     }
-    // ---- 5. Create the pending artisan ----
-const artisanId = await createArtisan({
-  name: d.name ?? '',
-  email: d.email ?? '',
-  password: '',
-  phone: d.phone ?? '',
-  location: d.location ?? '',
-  craft_type: craftType,
-  business_name: businessName,
-  id_number: d.id_number ?? '',
-  dob: d.dob,
-  id_type: idType,
-  indigenous_affiliation: indigenousAffiliation,
-  affiliation_document_path: affiliationPath,
-  id_document_path: idFrontPath,
-  id_document_back_path: idBackPath,
-  proof_of_craft_path: proofPath,
-  product_sample_1_path: s1Path,
-  product_sample_2_path: s2Path,
-  selfie_path: selfiePath,
-  face_matched: faceMatch,
-  face_confidence: faceConfidence,
-  duplicate_face_match: duplicateFaceMatch,
-  liveness_status: liveness.status,
-  liveness_challenges: liveness.completed,
-  liveness_verified_at: liveness.status === 'passed' ? new Date().toISOString() : null,
-  registration_notes: notes.join(' ') || null,
-});
 
-if (selfieEmbedding) {
-  try {
-    await saveFaceEmbedding(artisanId, selfieEmbedding);
-  } catch (cause) {
-    const message = cause instanceof Error ? cause.message : 'Unknown biometric template storage error.';
-    await logFaceAttempt({ email: d.email, artisanId, result: 'error', detail: { step: 'store_embedding', message } });
-    await appendArtisanRegistrationNote(artisanId, 'Encrypted face template could not be stored; duplicate checks require manual review.');
-  }
-}
+    if (selfieEmbedding && duplicateFaceMatch === false) {
+      try {
+        await saveFaceEmbedding(artisanId, selfieEmbedding);
+      } catch (cause) {
+        await safeLogFaceAttempt({ email: d.email, artisanId, result: 'error', detail: { step: 'store_embedding' } });
+        try {
+          await appendArtisanRegistrationNote(artisanId, 'Encrypted face template could not be stored; duplicate checks require manual review.');
+        } catch (error) {
+          console.error('[artisan-verification] failed to record embedding storage warning:', error instanceof Error ? error.message : error);
+        }
+      }
+    }
 
-await logActivity({
-  userId: artisanId,
-  role: 'artisan',
-  userName: d.name ?? '',
-  action: 'registration',
-  description: `New artisan registered: ${d.name} (${d.email}) - Status: pending${faceMatch ? ' - face verified' : ''}`,
-});
-    
+    try {
+      await logActivity({
+        userId: artisanId,
+        role: 'artisan',
+        userName: d.name ?? '',
+        action: 'registration',
+        description: `New artisan submitted verification: ${d.name} (${d.email}) - Decision: ${decision}${faceMatch ? ' - face verified' : ''}`,
+      });
+    } catch (error) {
+      console.error('[artisan-verification] activity log failed:', error instanceof Error ? error.message : error);
+    }
+    if (decision === 'auto_approved') {
+      try {
+        await pushNotification({
+          userId: artisanId,
+          role: 'artisan',
+          type: 'verification_update',
+          message: 'Your artisan account passed all verification criteria and is now approved.',
+        });
+      } catch (error) {
+        console.error('[artisan-verification] approval notification failed:', error instanceof Error ? error.message : error);
+      }
+    }
+
     return NextResponse.json({
       status: 'success',
-      message: 'Registration submitted! Your account is pending admin approval.',
-      requires_approval: true,
+      message: decision === 'auto_approved'
+        ? 'All verification criteria passed. Your artisan account is now verified.'
+        : 'Your application was submitted for manual admin review.',
+      requires_approval: decision !== 'auto_approved',
+      verification_decision: decision,
+      verification_status: verificationStatus,
       face_verified: faceMatch === true,
       duplicate_of: duplicateOf,
+      criteria: verificationCriteria,
     });
   } catch (e) {
     const code = typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
     const constraint = typeof e === 'object' && e !== null && 'constraint' in e ? e.constraint : undefined;
     if (code === '23505' && constraint === 'artisans_id_number_key') {
       return NextResponse.json(
-        { status: 'error', message: 'This government ID number is already associated with an artisan application. Check the number, or contact support if you believe this is a mistake.' },
-        { status: 409 }
+        { status: 'error', message: 'The ID number is already in use. Your application could not be saved; contact support for manual review.' },
+        { status: 500 }
       );
     }
     console.error('Artisan registration failed:', e);
