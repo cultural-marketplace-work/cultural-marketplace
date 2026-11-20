@@ -11,7 +11,7 @@
 // Supabase; the local fallback only supports the public buckets for display).
 
 import { createClient } from '@supabase/supabase-js';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
@@ -60,6 +60,72 @@ export async function uploadFile(bucket: Bucket, objectPathStr: string, data: Ar
   await writeFile(abs, Buffer.from(data));
   const url = isPrivate ? null : `/${['uploads', objectPathStr].join('/')}`;
   return { path: `${bucket}/${objectPathStr}`, publicUrl: url };
+}
+
+export async function deleteStoredFiles(paths: Array<string | null | undefined>): Promise<void> {
+  const grouped = new Map<Bucket, Set<string>>();
+  const localFiles: Array<{ bucket: Bucket | null; object: string }> = [];
+
+  for (const rawPath of paths) {
+    if (!rawPath) continue;
+    const value = rawPath.trim();
+    if (!value) continue;
+
+    const url = /^https?:\/\//i.test(value) ? new URL(value) : null;
+    if (url) {
+      const match = url.pathname.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)$/);
+      if (!match) continue;
+      const bucket = match[1] as Bucket;
+      if (!['product-media', 'profile-pictures', 'verification-docs'].includes(bucket)) continue;
+      if (!storageEnabled) {
+        throw new Error('Supabase Storage cleanup requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+      }
+      const objects = grouped.get(bucket) ?? new Set<string>();
+      objects.add(decodeURIComponent(match[2]));
+      grouped.set(bucket, objects);
+      continue;
+    }
+
+    if (value.startsWith('/uploads/')) {
+      localFiles.push({ bucket: null, object: decodeURIComponent(value.slice('/uploads/'.length)) });
+      continue;
+    }
+
+    const separator = value.indexOf('/');
+    const bucket = value.slice(0, separator) as Bucket;
+    if (separator <= 0 || !['product-media', 'profile-pictures', 'verification-docs'].includes(bucket)) continue;
+    const object = decodeURIComponent(value.slice(separator + 1));
+    if (storageEnabled) {
+      const objects = grouped.get(bucket) ?? new Set<string>();
+      objects.add(object);
+      grouped.set(bucket, objects);
+    } else {
+      localFiles.push({ bucket, object });
+    }
+  }
+
+  if (storageEnabled) {
+    const sb = client();
+    for (const [bucket, objects] of grouped) {
+      const { error } = await sb.storage.from(bucket).remove([...objects]);
+      if (error) throw new Error(`Could not remove ${bucket} files: ${error.message}`);
+    }
+    return;
+  }
+
+  for (const { bucket, object } of localFiles) {
+    const root = path.resolve(process.cwd(), bucket === 'verification-docs' ? 'verification-uploads' : path.join('public', 'uploads'));
+    const target = path.resolve(root, object);
+    const relative = path.relative(root, target);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error('Invalid stored file path during account deletion.');
+    }
+    try {
+      await unlink(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
 }
 
 /** URL to display a previously uploaded object (public buckets only). */

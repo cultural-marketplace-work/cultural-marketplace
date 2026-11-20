@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { getSession } from '@/lib/auth';
-import { getCartCount, getUser } from '@/lib/db';
+import { getArtisan, getCartCount, getUser } from '@/lib/db';
 import MobileMenu from './MobileMenu';
 import DesktopNavigation from './DesktopNavigation';
 import SearchBox from './SearchBox';
@@ -12,7 +12,7 @@ export default async function Header() {
 
   const [count, user] = await Promise.all([
     session?.role === 'customer' ? getCartCount(session.id) : 0,
-    session ? getUser(session.id) : null,
+    session?.role === 'artisan' ? getArtisan(session.id) : session ? getUser(session.id) : null,
   ]);
 
   const desktopLinks = [

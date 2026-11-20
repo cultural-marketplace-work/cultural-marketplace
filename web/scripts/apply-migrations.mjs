@@ -19,6 +19,10 @@ const files = [
   '../supabase/migrations/0009_artisan_affiliation.sql',
   '../supabase/migrations/0010_artisan_id_type.sql',
   '../supabase/migrations/0011_artisan_liveness_results.sql',
+  '../supabase/migrations/0012_artisan_account_registration.sql',
+  '../supabase/migrations/0013_user_data_anonymization.sql',
+  '../supabase/migrations/0014_account_table_consolidation.sql',
+  '../supabase/migrations/0015_sync_identity_sequences.sql',
 ];
 
 let failed = false;

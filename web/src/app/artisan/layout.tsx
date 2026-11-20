@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { getArtisan } from '@/lib/db';
 import PortalSidebar, { type NavSection } from '@/components/PortalSidebar';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,7 @@ const SECTIONS: NavSection[] = [
     title: 'Identity',
     items: [
       { href: '/artisan/profile', label: 'Profile', icon: 'user' },
+      { href: '/artisan-verification', label: 'Verify as an artisan', icon: 'shield' },
     ],
   },
 ];
@@ -47,11 +49,20 @@ const SECTIONS: NavSection[] = [
 export default async function ArtisanLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/dashboard');
+  const artisan = await getArtisan(session.id);
+  const isVerified = artisan?.verification_status === 'approved';
+  const sections = SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.map((item) => ({
+      ...item,
+      disabled: !isVerified && !['/artisan/dashboard', '/artisan/profile', '/artisan-verification'].includes(item.href),
+    })),
+  }));
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row bg-canvas">
       <PortalSidebar
-        sections={SECTIONS}
+        sections={sections}
         portalHome="/artisan/dashboard"
         portalLabel="Artisan Dashboard"
         userName={session.name}

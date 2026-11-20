@@ -43,6 +43,7 @@ export default async function AdminArtisanReviewPage({ params }: { params: Promi
           id: artisan.id, name: artisan.name, email: artisan.email, phone: artisan.phone,
           location: artisan.location, craft_type: artisan.craft_type, business_name: artisan.business_name,
           bio: artisan.bio, status: artisan.verification_status,
+          application_submitted: artisan.application_submitted !== false,
           id_number: artisan.id_number ?? null, id_type: artisan.id_type ?? null, dob: artisan.dob ?? null,
           face_matched: artisan.face_matched ?? null, face_confidence: artisan.face_confidence ?? null,
           duplicate_face_match: artisan.duplicate_face_match ?? null,

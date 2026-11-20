@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { updateProduct, listCategories, logActivity, getProduct, addCategory } from '@/lib/db';
 
 // Full product edit — every field the create form offers (tutorial,
 // variations, materials included), ownership-enforced.
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') {
     return NextResponse.json({ status: 'error' }, { status: 401 });
   }

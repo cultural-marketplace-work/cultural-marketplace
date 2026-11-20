@@ -19,15 +19,22 @@ Guards live in `web/src/middleware.ts` for `/customer/*`, `/artisan/*`, `/admin/
 Passwords: bcryptjs verifies legacy `$2y$` hashes (normalized to `$2b$` in-memory) —
 **existing users log in with their old passwords**.
 
+## Account storage
+- `users` stores customer and admin accounts; `artisans` stores artisan credentials, profiles, and verification state.
+- Migration `0014_account_table_consolidation.sql` copies legacy customer/admin records into `users`, preserves artisan profiles and notifications, then removes the legacy `customers` and `admins` tables.
+- Artisan sessions resolve against the artisan's email so existing sessions remain valid when legacy user and artisan IDs differ.
+
 ## Preserved business rules
 - Tutorial bookings force GCash (checkout validation + server-side rule)
 - GCash orders sit in `awaiting_payment` until admin verifies (mock flow auto-pays with SIM- reference)
 - Artisans are notified on COD orders immediately, on GCash only after verification
 - Workshop order items get ticket codes; NFC tags map to `/verify/[tagId]`
 - OTP registration: 6-digit, 10-minute expiry, stored in `pending_registrations` (was PHP session)
+- Artisan accounts can be created before verification. New accounts remain registered/not verified, are excluded from the admin review queue until an application is submitted, and cannot use the artisan portal until approved. Verification is completed while signed in through `/artisan-verification`.
+- Artisan verification proceeds through ID upload, browser-local OCR, applicant details, selfie/face review, and Indigenous affiliation/craft evidence; submissions remain pending admin approval. OCR results are advisory, and ID images are not sent to an OCR provider.
 
 ## Configuration (web/.env.example)
-`DATABASE_URL`, `JWT_SECRET`, `FACE_API_URL`, `OCR_API_KEY`, `PAYMENTS_MODE`, `PAYMONGO_SECRET_KEY`, `RESEND_API_KEY`, `OTP_FROM_EMAIL`, `NEXT_PUBLIC_SITE_URL`
+`DATABASE_URL`, `JWT_SECRET`, `FACE_API_URL`, `FACE_EMBEDDING_SECRET`, `PAYMENTS_MODE`, `PAYMONGO_SECRET_KEY`, `RESEND_API_KEY`, `OTP_FROM_EMAIL`, `NEXT_PUBLIC_SITE_URL`
 
 ## Costs
 All code free/open-source (MIT/Apache/BSD). Free-tier caveats and the zero-cost

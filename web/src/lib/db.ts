@@ -27,7 +27,7 @@ export const usingPostgres = DATABASE_URL.length > 0;
 // Demo store (mutable mirror of the seed data)
 // ---------------------------------------------------------------------------
 interface DemoRow {
-  users: Array<(typeof seedUsers)[number] & { bio?: string | null; is_verified?: boolean }>;
+  users: Array<(typeof seedUsers)[number] & { bio?: string | null; is_verified?: boolean; account_deleted_at?: string | null }>;
   artisans: Array<Artisan & { password: string; dob?: string | null; id_document_path?: string | null; id_document_back_path?: string | null; business_name?: string | null }>;
   categories: (typeof seedCategories)[number][];
   products: Product[];
@@ -52,13 +52,15 @@ function demo(): DemoRow {
       users: [
         ...seedUsers.map((u) => ({ ...u })),
         // demo accounts (password: demo1234) for preview exploration.
-        // The artisan demo row intentionally shares id 10 with the artisan profile
-        // so the portal shows the seeded products/orders/conversations.
         { id: 9001, name: 'mark john (demo)', email: 'customer@demo.local', password: DEMO_PASSWORD_HASH, role: 'customer' as const, location: 'Bunawan, Agusan del Sur', phone: '09000000000', profile_picture: null },
-        { id: 10, name: 'John Mark Belar (demo)', email: 'artisan@demo.local', password: DEMO_PASSWORD_HASH, role: 'artisan' as const, location: 'Bunawan, Agusan del Sur', phone: '09078813630', profile_picture: null },
         { id: 9002, name: 'System Administrator (demo)', email: 'admin@demo.local', password: DEMO_PASSWORD_HASH, role: 'admin' as const, location: null, phone: null, profile_picture: null },
       ],
-      artisans: seedArtisans.map((a) => ({ ...a, password: normalizeBcrypt('$2y$10$WTjCe4wDxRU8vpzZwbKxDukonvNxyEuIG44xSUt.NEH2ELqY8pS46'), dob: '2002-01-29' })),
+      artisans: seedArtisans.map((a) => ({
+        ...a,
+        email: a.id === 10 ? 'artisan@demo.local' : a.email,
+        password: a.id === 10 ? DEMO_PASSWORD_HASH : normalizeBcrypt('$2y$10$WTjCe4wDxRU8vpzZwbKxDukonvNxyEuIG44xSUt.NEH2ELqY8pS46'),
+        dob: '2002-01-29',
+      })),
       categories: seedCategories.map((c) => ({ ...c })),
       products: seedProducts.map((p) => ({ ...p, product_gallery: p.product_gallery ?? null })),
       cart_items: [],
@@ -75,7 +77,9 @@ function demo(): DemoRow {
       chat_messages: [
         { id: 1, conversation_id: 1, sender_role: 'customer', message: 'Hi! Is this basket still available in size M?', read_at: new Date().toISOString(), created_at: new Date(Date.now() - 3600_000).toISOString() },
       ],
-      notifications: seedNotifications.map((n) => ({ ...n })),
+      notifications: seedNotifications.map((n) => n.user_role === 'artisan'
+        ? { ...n, user_id: null, artisan_id: n.user_id }
+        : { ...n, artisan_id: null }),
       activity_logs: [
         { id: 1, user_id: 8, user_role: 'admin', user_name: 'System Administrator', action: 'login', description: 'Administrator logged in', created_at: new Date().toISOString() },
       ],
@@ -118,10 +122,9 @@ function num(v: unknown): number {
 // ---------------------------------------------------------------------------
 export async function findUserByEmail(email: string): Promise<(SessionUser & { password: string }) | null> {
   if (usingPostgres) {
-    const rows = await sql`select id, name, email, password, role, profile_picture from users where lower(email) = ${email.toLowerCase()} limit 1`;
+    const rows = await sql`select id, name, email, password, role, profile_picture from users where lower(email) = ${email.toLowerCase()} and role in ('customer', 'admin') and account_deleted_at is null limit 1`;
     if (!rows.length) {
-      // Legacy schema keeps artisan credentials in the artisans table
-      const a = await sql`select id, name, email, password, profile_picture, verification_status from artisans where lower(email) = ${email.toLowerCase()} limit 1`;
+      const a = await sql`select id, name, email, password, profile_picture, verification_status from artisans where lower(email) = ${email.toLowerCase()} and account_deleted_at is null limit 1`;
       if (!a.length) return null;
       const ar = a[0] as Record<string, unknown>;
       return { id: num(ar.id), name: String(ar.name), email: String(ar.email), password: String(ar.password), role: 'artisan' as Role, profile_picture: (ar.profile_picture as string) ?? null };
@@ -129,19 +132,32 @@ export async function findUserByEmail(email: string): Promise<(SessionUser & { p
     const r = rows[0] as Record<string, unknown>;
     return { id: num(r.id), name: String(r.name), email: String(r.email), password: String(r.password), role: String(r.role) as Role, profile_picture: (r.profile_picture as string) ?? null };
   }
-  const u = store!.users.find((x) => x.email.toLowerCase() === email.toLowerCase());
+  const u = store!.users.find((x) => x.email.toLowerCase() === email.toLowerCase() && x.role !== 'artisan' && !x.account_deleted_at);
   if (!u) {
-    // artisans live in the artisans table in the legacy schema
-    const a = store!.artisans.find((x) => x.email.toLowerCase() === email.toLowerCase());
+    const a = store!.artisans.find((x) => x.email.toLowerCase() === email.toLowerCase() && !x.account_deleted_at);
     if (a) return { id: a.id, name: a.name, email: a.email, password: a.password, role: 'artisan', profile_picture: a.profile_picture };
     return null;
   }
   return { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role, profile_picture: u.profile_picture ?? null };
 }
 
+export async function isEmailRegistered(email: string): Promise<boolean> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (usingPostgres) {
+    const rows = await sql`select exists (
+      select 1 from users where lower(email) = ${normalizedEmail}
+      union all
+      select 1 from artisans where lower(email) = ${normalizedEmail}
+    ) as registered`;
+    return Boolean((rows[0] as { registered: boolean }).registered);
+  }
+  return store!.users.some((user) => user.email.toLowerCase() === normalizedEmail) ||
+    store!.artisans.some((artisan) => artisan.email.toLowerCase() === normalizedEmail);
+}
+
 export async function getUser(id: number): Promise<(SessionUser & { phone?: string | null; location?: string | null; bio?: string | null }) | null> {
   if (usingPostgres) {
-    const rows = await sql`select id, name, email, role, profile_picture, phone, location, bio from users where id = ${id} limit 1`;
+    const rows = await sql`select id, name, email, role, profile_picture, phone, location, bio from users where id = ${id} and role in ('customer', 'admin') and account_deleted_at is null limit 1`;
     if (!rows.length) return null;
     const r = rows[0] as Record<string, unknown>;
     return {
@@ -150,10 +166,43 @@ export async function getUser(id: number): Promise<(SessionUser & { phone?: stri
       phone: (r.phone as string) ?? null, location: (r.location as string) ?? null, bio: (r.bio as string) ?? null,
     };
   }
-  const u = store!.users.find((x) => x.id === id);
+  const u = store!.users.find((x) => x.id === id && x.role !== 'artisan' && !x.account_deleted_at);
   return u ? { ...u, phone: u.phone ?? null, location: u.location ?? null, bio: (u as any).bio ?? null } : null;
 }
 
+export async function updateAdminProfile(id: number, p: { name?: string; phone?: string }): Promise<void> {
+  if (usingPostgres) {
+    await sql`update users set
+      name = coalesce(${p.name ?? null}, name),
+      phone = coalesce(${p.phone ?? null}, phone)
+      where id = ${id} and role = 'admin'`;
+    return;
+  }
+  const admin = store!.users.find((user) => user.id === id && user.role === 'admin');
+  if (admin) Object.assign(admin, Object.fromEntries(Object.entries(p).filter(([, value]) => value !== undefined)));
+}
+
+export async function isAccountActive(id: number, role: Role, email?: string): Promise<boolean> {
+  if (usingPostgres) {
+    if (role === 'artisan') {
+      const rows = email
+        ? await sql`select exists (select 1 from artisans where lower(email) = ${email.toLowerCase()} and account_deleted_at is null) as active`
+        : await sql`select exists (select 1 from artisans where id = ${id} and account_deleted_at is null) as active`;
+      return Boolean((rows[0] as { active: boolean }).active);
+    }
+    const rows = await sql`select exists (
+      select 1 from users where id = ${id} and role = ${role} and account_deleted_at is null
+    ) as active`;
+    return Boolean((rows[0] as { active: boolean }).active);
+  }
+  if (role === 'artisan') {
+    const artisan = email
+      ? store!.artisans.find((entry) => entry.email.toLowerCase() === email.toLowerCase())
+      : store!.artisans.find((entry) => entry.id === id);
+    return Boolean(artisan && !artisan.account_deleted_at);
+  }
+  return store!.users.some((user) => user.id === id && user.role === role && !user.account_deleted_at);
+}
 export async function createCustomer(input: { name: string; email: string; password: string; phone: string; location?: string }): Promise<number> {
   if (usingPostgres) {
     const rows = await sql`insert into users (name, email, password, role, phone, location, is_verified)
@@ -163,6 +212,29 @@ export async function createCustomer(input: { name: string; email: string; passw
   }
   const id = Math.max(0, ...store!.users.map((u) => u.id)) + 1;
   store!.users.push({ id, name: input.name, email: input.email, password: input.password, role: 'customer', location: input.location ?? null, phone: input.phone, profile_picture: null });
+  return id;
+}
+
+export async function createUnverifiedArtisan(input: {
+  name: string; email: string; password: string; phone: string;
+}): Promise<number> {
+  if (usingPostgres) {
+    const rows = await sql`insert into artisans (name, email, password, phone, verification_status, application_submitted)
+      values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, 'pending', false)
+      returning id`;
+    invalidate('artisans*');
+    invalidate('admin:stats');
+    return num(rows[0].id);
+  }
+
+  const id = Math.max(0, ...store!.artisans.map((artisan) => artisan.id)) + 1;
+  store!.artisans.push({
+    id, name: input.name, email: input.email, password: input.password, phone: input.phone,
+    location: null, craft_type: null, business_name: null, bio: null, profile_picture: null,
+    verification_status: 'pending', application_submitted: false,
+  });
+  invalidate('artisans*');
+  invalidate('admin:stats');
   return id;
 }
 
@@ -177,34 +249,72 @@ export async function createArtisan(input: {
   liveness_challenges: string[]; liveness_verified_at?: string | null;
   registration_notes?: string | null;
 }): Promise<number> {
+  const dob = input.dob?.trim() || null;
   if (usingPostgres) {
     const id = await sql.begin(async (tx) => {
-      const rows = await tx`insert into artisans (name, email, password, phone, location, craft_type, business_name, id_number, id_type, dob, indigenous_affiliation, affiliation_document_path, id_document_path, id_document_back_path, proof_of_craft_path, product_sample_1_path, product_sample_2_path, selfie_path, verification_status)
-        values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, ${input.location}, ${input.craft_type}, ${input.business_name ?? null}, ${input.id_number}, ${input.id_type}, ${input.dob ?? null}, ${input.indigenous_affiliation ?? null}, ${input.affiliation_document_path ?? null}, ${input.id_document_path ?? null}, ${input.id_document_back_path ?? null}, ${input.proof_of_craft_path ?? null}, ${input.product_sample_1_path ?? null}, ${input.product_sample_2_path ?? null}, ${input.selfie_path ?? null}, 'pending')
+      const existing = await tx`select id from artisans where lower(email) = ${input.email.toLowerCase()} limit 1`;
+      if (existing.length) {
+        const artisanId = num(existing[0].id);
+        await tx`update artisans set
+          name = ${input.name}, phone = ${input.phone}, location = ${input.location},
+          craft_type = ${input.craft_type}, business_name = ${input.business_name ?? null},
+          id_number = ${input.id_number.trim() || null}, id_type = ${input.id_type}, dob = ${dob},
+          indigenous_affiliation = ${input.indigenous_affiliation ?? null},
+          affiliation_document_path = ${input.affiliation_document_path ?? null},
+          id_document_path = ${input.id_document_path ?? null}, id_document_back_path = ${input.id_document_back_path ?? null},
+          proof_of_craft_path = ${input.proof_of_craft_path ?? null},
+          product_sample_1_path = ${input.product_sample_1_path ?? null},
+          product_sample_2_path = ${input.product_sample_2_path ?? null}, selfie_path = ${input.selfie_path ?? null},
+          verification_status = 'pending', application_submitted = true
+          where id = ${artisanId}`;
+        await tx`insert into artisan_verification_results
+          (artisan_id, face_matched, face_confidence, duplicate_face_match, liveness_status, liveness_challenges, liveness_verified_at, registration_notes)
+          values (${artisanId}, ${input.face_matched ?? null}, ${input.face_confidence ?? null}, ${input.duplicate_face_match ?? null},
+            ${input.liveness_status}, ${JSON.stringify(input.liveness_challenges)}::jsonb, ${input.liveness_verified_at ?? null}, ${input.registration_notes ?? null})
+          on conflict (artisan_id) do update set
+            face_matched = excluded.face_matched, face_confidence = excluded.face_confidence,
+            duplicate_face_match = excluded.duplicate_face_match, liveness_status = excluded.liveness_status,
+            liveness_challenges = excluded.liveness_challenges, liveness_verified_at = excluded.liveness_verified_at,
+            registration_notes = excluded.registration_notes`;
+        return artisanId;
+      }
+      const rows = await tx`insert into artisans (name, email, password, phone, location, craft_type, business_name, id_number, id_type, dob, indigenous_affiliation, affiliation_document_path, id_document_path, id_document_back_path, proof_of_craft_path, product_sample_1_path, product_sample_2_path, selfie_path, verification_status, application_submitted)
+        values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, ${input.location}, ${input.craft_type}, ${input.business_name ?? null}, ${input.id_number.trim() || null}, ${input.id_type}, ${dob}, ${input.indigenous_affiliation ?? null}, ${input.affiliation_document_path ?? null}, ${input.id_document_path ?? null}, ${input.id_document_back_path ?? null}, ${input.proof_of_craft_path ?? null}, ${input.product_sample_1_path ?? null}, ${input.product_sample_2_path ?? null}, ${input.selfie_path ?? null}, 'pending', true)
         returning id`;
       const artisanId = num(rows[0].id);
       await tx`insert into artisan_verification_results (artisan_id, face_matched, face_confidence, duplicate_face_match, liveness_status, liveness_challenges, liveness_verified_at, registration_notes)
         values (${artisanId}, ${input.face_matched ?? null}, ${input.face_confidence ?? null}, ${input.duplicate_face_match ?? null}, ${input.liveness_status}, ${JSON.stringify(input.liveness_challenges)}::jsonb, ${input.liveness_verified_at ?? null}, ${input.registration_notes ?? null})`;
       return artisanId;
     });
-    // Mirror into users (legacy schema keeps artisan credentials in both tables):
-    // notifications and other FKs point at users(id), so without this row every
-    // later notification for this artisan would fail. Best-effort — login also
-    // works directly from the artisans table via findUserByEmail's fallback.
-    try {
-      await sql`insert into users (id, name, email, password, role, location, phone, profile_picture)
-        values (${id}, ${input.name}, ${input.email}, ${input.password}, 'artisan', ${input.location}, ${input.phone}, null)
-        on conflict (id) do nothing`;
-      // Explicit-id inserts don't advance the sequence — keep it ahead of max(id)
-      await sql`select setval(pg_get_serial_sequence('users','id'), (select greatest(max(id), 1) from users))`;
-    } catch { /* non-fatal: login fallback covers this artisan */ }
+    invalidate('artisans*');
+    invalidate('admin:stats');
     return id;
+  }
+  const existing = store!.artisans.find((artisan) => artisan.email.toLowerCase() === input.email.toLowerCase());
+  if (existing) {
+    Object.assign(existing, {
+      name: input.name, phone: input.phone, location: input.location, craft_type: input.craft_type,
+      business_name: input.business_name ?? null, id_number: input.id_number.trim() || null, id_type: input.id_type,
+      dob, indigenous_affiliation: input.indigenous_affiliation ?? null,
+      affiliation_document_path: input.affiliation_document_path ?? null,
+      id_document_path: input.id_document_path ?? null, id_document_back_path: input.id_document_back_path ?? null,
+      proof_of_craft_path: input.proof_of_craft_path ?? null, product_sample_1_path: input.product_sample_1_path ?? null,
+      product_sample_2_path: input.product_sample_2_path ?? null, selfie_path: input.selfie_path ?? null,
+      face_matched: input.face_matched ?? null, face_confidence: input.face_confidence ?? null,
+      duplicate_face_match: input.duplicate_face_match ?? null, liveness_status: input.liveness_status,
+      liveness_challenges: input.liveness_challenges, liveness_verified_at: input.liveness_verified_at ?? null,
+      registration_notes: input.registration_notes ?? null, verification_status: 'pending', application_submitted: true,
+    });
+    invalidate('artisans*');
+    invalidate('admin:stats');
+    return existing.id;
   }
   const id = Math.max(0, ...store!.artisans.map((a) => a.id)) + 1;
   store!.artisans.push({
     id, name: input.name, email: input.email, password: input.password, phone: input.phone,
     location: input.location, craft_type: input.craft_type, business_name: input.business_name ?? null,
     bio: null, profile_picture: null, verification_status: 'pending',
+    application_submitted: true,
     id_type: input.id_type,
     duplicate_face_match: input.duplicate_face_match ?? null,
     liveness_status: input.liveness_status,
@@ -216,11 +326,10 @@ export async function createArtisan(input: {
     proof_of_craft_path: input.proof_of_craft_path ?? null, product_sample_1_path: input.product_sample_1_path ?? null, product_sample_2_path: input.product_sample_2_path ?? null,
     selfie_path: input.selfie_path ?? null, face_matched: input.face_matched ?? null,
     face_confidence: input.face_confidence ?? null, registration_notes: input.registration_notes ?? null,
-    dob: input.dob ?? null,
+    dob,
   });
-  // mirror into users so unified login works
-  const uid = Math.max(0, ...store!.users.map((u) => u.id)) + 1;
-  store!.users.push({ id: uid, name: input.name, email: input.email, password: input.password, role: 'artisan', location: input.location, phone: input.phone, profile_picture: null });
+  invalidate('artisans*');
+  invalidate('admin:stats');
   return id;
 }
 
@@ -401,6 +510,7 @@ function mapArtisan(r: Record<string, unknown>): Artisan {
     liveness_challenges: (r.liveness_challenges as string[]) ?? null,
     liveness_verified_at: r.liveness_verified_at == null ? null : String(r.liveness_verified_at),
     verification_status: r.verification_status as Artisan['verification_status'],
+    application_submitted: r.application_submitted !== false,
     phone: (r.phone as string) ?? null,
   };
 }
@@ -408,20 +518,20 @@ function mapArtisan(r: Record<string, unknown>): Artisan {
 export async function listApprovedArtisans(): Promise<Artisan[]> {
   return cached('artisans:approved', async () => {
     if (usingPostgres) {
-      const rows = await sql`select * from artisans where verification_status = 'approved' order by name`;
+      const rows = await sql`select * from artisans where verification_status = 'approved' and account_deleted_at is null order by name`;
       return (rows as unknown as Record<string, unknown>[]).map(mapArtisan);
     }
-    return store!.artisans.filter((a) => a.verification_status === 'approved');
+    return store!.artisans.filter((a) => a.verification_status === 'approved' && !a.account_deleted_at);
   });
 }
 
 export async function getArtisan(id: number): Promise<Artisan | null> {
   return cached(`artisan:${id}`, async () => {
     if (usingPostgres) {
-      const rows = await sql`select * from artisans where id = ${id} limit 1`;
+      const rows = await sql`select * from artisans where id = ${id} and account_deleted_at is null limit 1`;
       return rows.length ? mapArtisan(rows[0] as unknown as Record<string, unknown>) : null;
     }
-    const a = store!.artisans.find((x) => x.id === id);
+    const a = store!.artisans.find((x) => x.id === id && !x.account_deleted_at);
     return a ? { ...a } : null;
   }, 60_000);
 }
@@ -443,28 +553,30 @@ export function updateProductMediaDemo(productId: number, imagePath: string | nu
 
 export async function getArtisanByEmail(email: string): Promise<Artisan | null> {
   if (usingPostgres) {
-    const rows = await sql`select * from artisans where email = ${email} limit 1`;
+    const rows = await sql`select * from artisans where lower(email) = ${email.toLowerCase()} and account_deleted_at is null limit 1`;
     return rows.length ? mapArtisan(rows[0] as unknown as Record<string, unknown>) : null;
   }
-  return store!.artisans.find((a) => a.email === email) ?? null;
+  return store!.artisans.find((a) => a.email.toLowerCase() === email.toLowerCase() && !a.account_deleted_at) ?? null;
 }
 
 export async function listPendingArtisans(): Promise<Artisan[]> {
   if (usingPostgres) {
-    const rows = await sql`select * from artisans where verification_status = 'pending' order by created_at desc`;
+    const rows = await sql`select * from artisans where verification_status = 'pending' and application_submitted = true and account_deleted_at is null order by created_at desc`;
     return (rows as unknown as Record<string, unknown>[]).map(mapArtisan);
   }
-  return store!.artisans.filter((a) => a.verification_status === 'pending');
+  return store!.artisans.filter((a) => a.verification_status === 'pending' && a.application_submitted !== false && !a.account_deleted_at);
 }
 
 export async function setArtisanStatus(id: number, status: Artisan['verification_status']): Promise<void> {
   if (usingPostgres) {
     await sql`update artisans set verification_status = ${status} where id = ${id}`;
     invalidate('artisans*');
+    invalidate(`artisan:${id}`);
     return;
   }
   const a = store!.artisans.find((x) => x.id === id);
   if (a) a.verification_status = status;
+  invalidate(`artisan:${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1125,34 +1237,53 @@ export async function listAllOrdersWithItems(): Promise<Array<{ order: Order; it
 // ---------------------------------------------------------------------------
 export async function pushNotification(n: { userId: number; role: string; type: string; message: string; data?: object }): Promise<void> {
   if (usingPostgres) {
-    await sql`insert into notifications (user_id, user_role, type, message, data)
-      values (${n.userId}, ${n.role}, ${n.type}, ${n.message}, ${(n.data ?? null) as unknown as string | null})`;
+    if (n.role === 'artisan') {
+      await sql`insert into notifications (artisan_id, user_role, type, message, data)
+        values (${n.userId}, ${n.role}, ${n.type}, ${n.message}, ${(n.data ?? null) as unknown as string | null})`;
+    } else {
+      await sql`insert into notifications (user_id, user_role, type, message, data)
+        values (${n.userId}, ${n.role}, ${n.type}, ${n.message}, ${(n.data ?? null) as unknown as string | null})`;
+    }
     return;
   }
   store!.notifications.push({
     id: Math.max(0, ...store!.notifications.map((x) => x.id)) + 1,
-    user_id: n.userId, user_role: n.role, type: n.type, message: n.message,
+    user_id: n.role === 'artisan' ? null : n.userId,
+    artisan_id: n.role === 'artisan' ? n.userId : null,
+    user_role: n.role, type: n.type, message: n.message,
     is_read: false, created_at: new Date().toISOString(),
   });
 }
 
 export async function listNotifications(userId: number, role: string): Promise<Notification[]> {
   if (usingPostgres) {
-    const rows = await sql`select * from notifications where user_id = ${userId} and user_role = ${role} order by created_at desc limit 50`;
+    const rows = role === 'artisan'
+      ? await sql`select * from notifications where artisan_id = ${userId} and user_role = ${role} order by created_at desc limit 50`
+      : await sql`select * from notifications where user_id = ${userId} and user_role = ${role} order by created_at desc limit 50`;
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
-      id: num(r.id), user_id: num(r.user_id), user_role: String(r.user_role), type: String(r.type),
+      id: num(r.id), user_id: r.user_id == null ? null : num(r.user_id),
+      artisan_id: r.artisan_id == null ? null : num(r.artisan_id),
+      user_role: String(r.user_role), type: String(r.type),
       message: String(r.message), is_read: Boolean(r.is_read), created_at: tsString(r.created_at) ?? new Date().toISOString(),
     }));
   }
-  return store!.notifications.filter((n) => n.user_id === userId && n.user_role === role).sort((a, b) => b.id - a.id);
+  return store!.notifications.filter((n) =>
+    n.user_role === role && (role === 'artisan' ? n.artisan_id === userId : n.user_id === userId)
+  ).sort((a, b) => b.id - a.id);
 }
 
 export async function markNotificationsRead(userId: number, role: string): Promise<void> {
   if (usingPostgres) {
-    await sql`update notifications set is_read = true where user_id = ${userId} and user_role = ${role}`;
+    if (role === 'artisan') {
+      await sql`update notifications set is_read = true where artisan_id = ${userId} and user_role = ${role}`;
+    } else {
+      await sql`update notifications set is_read = true where user_id = ${userId} and user_role = ${role}`;
+    }
     return;
   }
-  store!.notifications.forEach((n) => { if (n.user_id === userId && n.user_role === role) n.is_read = true; });
+  store!.notifications.forEach((n) => {
+    if (n.user_role === role && (role === 'artisan' ? n.artisan_id === userId : n.user_id === userId)) n.is_read = true;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1294,9 +1425,9 @@ export async function adminStats(): Promise<{ customers: number; artisans: numbe
     if (usingPostgres) {
       const r = await sql`
         select
-          (select count(*) from users where role = 'customer') as customers,
-          (select count(*) from artisans) as artisans,
-          (select count(*) from artisans where verification_status = 'pending') as pending_artisans,
+          (select count(*) from users where role = 'customer' and account_deleted_at is null) as customers,
+          (select count(*) from artisans where account_deleted_at is null) as artisans,
+          (select count(*) from artisans where verification_status = 'pending' and application_submitted = true and account_deleted_at is null) as pending_artisans,
           (select count(*) from orders) as orders,
           (select coalesce(sum(total_amount), 0) from orders where status = 'paid') as revenue,
           (select count(*) from products) as products`;
@@ -1307,9 +1438,9 @@ export async function adminStats(): Promise<{ customers: number; artisans: numbe
       };
     }
     return {
-      customers: store!.users.filter((u) => u.role === 'customer').length,
-      artisans: store!.artisans.length,
-      pendingArtisans: store!.artisans.filter((a) => a.verification_status === 'pending').length,
+      customers: store!.users.filter((u) => u.role === 'customer' && !u.account_deleted_at).length,
+      artisans: store!.artisans.filter((artisan) => !artisan.account_deleted_at).length,
+      pendingArtisans: store!.artisans.filter((a) => a.verification_status === 'pending' && a.application_submitted !== false && !a.account_deleted_at).length,
       orders: store!.orders.length,
       revenue: store!.orders.filter((o) => o.status === 'paid').reduce((s, o) => s + o.total_amount, 0),
       products: store!.products.length,

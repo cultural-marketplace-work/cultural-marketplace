@@ -20,7 +20,7 @@ scripts/   Legacy MariaDB -> Postgres data importer
    - `DATABASE_URL` — Supabase/Postgres connection string (leave empty for an in-memory demo store)
    - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — enables Storage uploads
    - `JWT_SECRET` — any long random string
-   - Optional: `RESEND_API_KEY`, `SMTP_*`, `FACE_API_URL`, `OCR_API_KEY`, `PAYMONGO_SECRET_KEY`, `IMAGE_SIDECAR_URL`
+   - Optional: `RESEND_API_KEY`, `SMTP_*`, `FACE_API_URL`, `FACE_EMBEDDING_SECRET`, `PAYMONGO_SECRET_KEY`, `IMAGE_SIDECAR_URL`
 2. **Install** — from `web/`: `npm install`
 3. **Database** — apply `supabase/migrations/*.sql` in numeric order, then `supabase/seed.sql`
 4. **Image sidecar** (moderation) — from `web/`: `node scripts/clip-sidecar.mjs` (port 8091; models download once into `web/.transformers-cache`)
@@ -33,7 +33,7 @@ Demo accounts (seeded): `customer@demo.local` · `artisan@demo.local` · `admin@
 - **Storefront** — browse with category/price filters, product pages with galleries, cart, checkout (customer info gate), PayMongo GCash payment flow, order tracking.
 - **Artisan portal** — products (media uploads with moderation pipeline: size/duplicate/NSFW checks + advisory craft score), variations & stock, J&T-style parcel booking with printable waybills, workshop/experience listings + attendee check-in, reviews, statistics.
 - **Admin console** — analytics dashboard (demographics, trends), people management, categories, homepage editor, image-moderation queue, reports, NFC tag registry, orders/payments/shipments oversight, activity logs.
-- **Trust & safety** — account verification (OCR + face match sidecar), product image moderation with admin approval queue, report handling.
+- **Trust & safety** — artisan applicants select PhilSys/National ID, Driver's License, UMID, or Postal ID and upload both sides. The ID must show an address; applicants can enter it manually if browser-local OCR misses it. MediaPipe Face Landmarker runs blink and head-turn challenges in the browser; server-side face-to-ID and duplicate checks are advisory and all results remain pending admin review. Face templates are AES-256-GCM encrypted at rest (`FACE_EMBEDDING_SECRET`, or `JWT_SECRET` fallback); verification documents use the private storage bucket. Browser challenge checks are not a guarantee against spoofing. Product image moderation includes an admin approval queue and report handling.
 - **NFC authenticity tags** — Web NFC write-to-card flow (artisan or admin), server-generated tag IDs, public `/verify/<tagId>` page.
 
 ## Deploying to Vercel

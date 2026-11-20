@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { setArtisanStatus, logActivity, pushNotification } from '@/lib/db';
+import { getArtisanFull, setArtisanStatus, logActivity, pushNotification } from '@/lib/db';
 
 // Admin approve/reject/suspend for artisans. The status change itself is the
 // critical operation; notification + audit log are wrapped so a failure there
@@ -22,7 +22,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'error', message: 'Invalid input.' }, { status: 400 });
   }
 
-  await setArtisanStatus(Number(artisan_id), status as 'approved' | 'rejected' | 'suspended' | 'pending');
+  const artisan = await getArtisanFull(Number(artisan_id));
+  if (!artisan) return NextResponse.json({ status: 'error', message: 'Artisan not found.' }, { status: 404 });
+  if (artisan.application_submitted === false) {
+    return NextResponse.json({ status: 'error', message: 'The artisan must submit verification before their status can be changed.' }, { status: 409 });
+  }
+  await setArtisanStatus(artisan.id, status as 'approved' | 'rejected' | 'suspended' | 'pending');
 
   const sideEffects = { notification: false, audit: false };
   try {

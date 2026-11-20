@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listArtisanOrders, getArtisan } from '@/lib/db';
 import { getShipmentByOrderItem } from '@/lib/shipments';
 import ShipWizard from './ShipWizard';
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function ShipOrderItemPage({ params }: { params: Promise<{ itemId: string }> }) {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/orders');
+  await requireVerifiedArtisan(session.id);
   const { itemId } = await params;
 
   const item = (await listArtisanOrders(session.id)).find((i) => i.id === Number(itemId));

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listCategories } from '@/lib/db';
 import ProductForm from '../ProductForm';
 
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function NewProductPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/products/new');
+  await requireVerifiedArtisan(session.id);
 
   const categories = await listCategories('product');
   return (

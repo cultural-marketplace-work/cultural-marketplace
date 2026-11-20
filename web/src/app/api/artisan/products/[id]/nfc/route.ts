@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { getProduct } from '@/lib/db';
 import { registerNfcTag, activateNfcTag, clearNfcTag } from '@/lib/adminDb';
 import { logActivity } from '@/lib/db';
@@ -12,7 +12,7 @@ import { logActivity } from '@/lib/db';
 // Ownership is enforced against the session artisan; admins go through
 // /api/admin/nfc.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') {
     return NextResponse.json({ status: 'error', message: 'Please sign in as an artisan.' }, { status: 401 });
   }

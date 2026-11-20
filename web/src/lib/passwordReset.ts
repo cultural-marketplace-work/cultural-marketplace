@@ -57,16 +57,30 @@ export async function getResetEmail(token: string): Promise<string | null> {
   }
 }
 
-/** Updates the password everywhere the account lives (users + artisans tables). */
+/** Updates the password in the account's canonical table. */
 export async function setPasswordByEmail(email: string, passwordHash: string): Promise<void> {
   const e = email.toLowerCase();
+  const account = await findUserByEmail(e);
+  if (!account) throw new Error('The account for this password reset could not be found.');
   if (usingPostgres) {
-    await sql`update users set password = ${passwordHash} where lower(email) = ${e}`;
-    await sql`update artisans set password = ${passwordHash} where lower(email) = ${e}`;
+    if (account.role === 'artisan') {
+      const rows = await sql`update artisans set password = ${passwordHash} where lower(email) = ${e} and account_deleted_at is null returning id`;
+      if (!rows.length) throw new Error('The artisan account is no longer active.');
+    } else {
+      const rows = await sql`update users set password = ${passwordHash} where lower(email) = ${e} and role = ${account.role} and account_deleted_at is null returning id`;
+      if (!rows.length) throw new Error('The account is no longer active.');
+    }
     return;
   }
-  for (const u of store!.users) if (u.email.toLowerCase() === e) u.password = passwordHash;
-  for (const a of store!.artisans) if (a.email.toLowerCase() === e) a.password = passwordHash;
+  if (account.role === 'artisan') {
+    const artisan = store!.artisans.find((entry) => entry.email.toLowerCase() === e && !entry.account_deleted_at);
+    if (!artisan) throw new Error('The artisan account is no longer active.');
+    artisan.password = passwordHash;
+  } else {
+    const user = store!.users.find((entry) => entry.email.toLowerCase() === e && entry.role === account.role && !entry.account_deleted_at);
+    if (!user) throw new Error('The account is no longer active.');
+    user.password = passwordHash;
+  }
 }
 
 /** Reset requests for this email in the last 15 minutes (counted from activity_logs). */

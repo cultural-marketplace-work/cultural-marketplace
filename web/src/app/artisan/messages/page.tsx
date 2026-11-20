@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listConversations } from '@/lib/db';
 import MessagesClient from '@/app/customer/account/messages/MessagesClient';
 
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanMessagesPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/messages');
+  await requireVerifiedArtisan(session.id);
 
   const conversations = await listConversations({ id: session.id, role: 'artisan' });
   return (

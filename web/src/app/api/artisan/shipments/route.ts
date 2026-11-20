@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { createShipment } from '@/lib/shipments';
 import { listArtisanOrders, getUserPhone, pushNotification, logActivity } from '@/lib/db';
 
@@ -9,7 +9,7 @@ import { listArtisanOrders, getUserPhone, pushNotification, logActivity } from '
 const PHONE_RE = /^(09\d{9}|\+639\d{9})$/;
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') {
     return NextResponse.json({ status: 'error', message: 'Unauthorized' }, { status: 401 });
   }

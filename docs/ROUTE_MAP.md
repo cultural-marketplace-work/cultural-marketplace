@@ -23,7 +23,7 @@ Phase tags: **P0** foundation · **P1** auth · **P2** marketplace · **P3** car
 | `POST /auth/verifyOTP` | `POST /api/auth/verify-otp` | P1 |
 | `POST /auth/resendOTP` | `POST /api/auth/register-customer` (idempotent resend) | P1 |
 | `POST /auth/registerArtisan` | `POST /api/auth/register-artisan` | P1 |
-| `POST /auth/processIdCapture` (OCR) | `POST /api/auth/register-artisan` (OCR when `OCR_API_KEY` set) | P1 |
+| `POST /auth/processIdCapture` (OCR) | Browser-local Tesseract.js OCR during artisan registration | P1 |
 | `POST /auth/verifyFace` | face-api `POST /verify` (when `FACE_API_URL` set) | P1 |
 | `POST /auth/checkFaceDuplicate` | face-api `POST /check-duplicate` | P1 |
 

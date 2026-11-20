@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getConversation, listMessages, sendMessage } from '@/lib/db';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ conversationId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ status: 'error' }, { status: 401 });
+  if (session.role === 'artisan' && !await getVerifiedArtisanSession()) {
+    return NextResponse.json({ status: 'error', message: 'Artisan verification is required to access messages.' }, { status: 403 });
+  }
   const { conversationId } = await params;
   const conv = await getConversation(Number(conversationId));
   if (!conv) return NextResponse.json({ status: 'error', message: 'Conversation not found.' }, { status: 404 });
@@ -23,6 +27,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ convers
   const session = await getSession();
   if (!session || (session.role !== 'customer' && session.role !== 'artisan')) {
     return NextResponse.json({ status: 'error' }, { status: 401 });
+  }
+  if (session.role === 'artisan' && !await getVerifiedArtisanSession()) {
+    return NextResponse.json({ status: 'error', message: 'Artisan verification is required to access messages.' }, { status: 403 });
   }
   const { conversationId } = await params;
   const conv = await getConversation(Number(conversationId));

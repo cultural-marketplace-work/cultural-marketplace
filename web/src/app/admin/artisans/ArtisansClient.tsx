@@ -13,6 +13,7 @@ interface ArtisanRow {
   craft_type: string | null;
   location: string | null;
   verification_status: ArtisanStatus;
+  application_submitted: boolean;
   productCount: number;
 }
 
@@ -22,9 +23,10 @@ export default function ArtisansClient({ initial }: { initial: ArtisanRow[] }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const pending = artisans.filter((a) => a.verification_status === 'pending');
+  const registered = artisans.filter((a) => !a.application_submitted);
+  const pending = artisans.filter((a) => a.application_submitted && a.verification_status === 'pending');
   const approved = artisans.filter((a) => a.verification_status === 'approved');
-  const other = artisans.filter((a) => a.verification_status === 'rejected' || a.verification_status === 'suspended');
+  const other = artisans.filter((a) => a.application_submitted && (a.verification_status === 'rejected' || a.verification_status === 'suspended'));
 
   async function setStatus(id: number, status: ArtisanStatus) {
     setBusy(true);
@@ -53,6 +55,23 @@ export default function ArtisansClient({ initial }: { initial: ArtisanRow[] }) {
   return (
     <div className="mt-6 space-y-8">
       {msg && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{msg}</p>}
+
+      <section>
+        <h2 className="font-serif text-xl font-bold text-brand-900">Registered accounts — verification not submitted ({registered.length})</h2>
+        <div className="mt-3 space-y-3">
+          {registered.map((a) => (
+            <div key={a.id} className="card flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <Link href={`/admin/artisans/${a.id}`} className="font-semibold text-stone-800 hover:text-brand-700 hover:underline">{a.name}</Link>
+                <p className="text-sm text-stone-500">{a.email} · {a.craft_type ?? '—'} · {a.location ?? '—'}</p>
+                <span className="badge mt-1 bg-stone-100 text-stone-700">Registered · Not verified</span>
+              </div>
+              <Link href={`/admin/artisans/${a.id}`} className="btn-outline px-3 py-1 text-xs">Manage profile</Link>
+            </div>
+          ))}
+          {registered.length === 0 && <p className="text-sm text-stone-500">No artisans are waiting to submit verification.</p>}
+        </div>
+      </section>
 
       <section>
         <h2 className="font-serif text-xl font-bold text-brand-900">Pending applications ({pending.length})</h2>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { getProduct, listCategories } from '@/lib/db';
 import ProductForm from '../../ProductForm';
 import ProductMedia from './ProductMedia';
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/products');
+  await requireVerifiedArtisan(session.id);
   const { id } = await params;
   const product = await getProduct(Number(id));
   if (!product || product.artisan_id !== session.id) notFound();

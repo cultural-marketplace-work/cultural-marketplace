@@ -4,10 +4,9 @@ import {
   createArtisan,
   getArtisanByEmail,
   logActivity,
-  findUserByEmail,
-  hashPassword,
 } from '@/lib/db';
 
+import { getSession } from '@/lib/auth';
 import { openPending } from '@/lib/pendingToken';
 import type { OcrApplicantFields } from '@/lib/ocrFields';
 import { VALID_ARTISAN_ID_TYPES } from '@/lib/validArtisanIdTypes';
@@ -104,13 +103,17 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const token = String(form.get('token') ?? '');
     const d = openPending(token);
-if (!d) {
-  return NextResponse.json({ status: 'error', message: 'Registration session expired. Please start again.' }, { status: 410 });
-}
-// A token can be reused until it expires, so refuse if this email already registered.
-if (await findUserByEmail(d.email ?? '')) {
-  return NextResponse.json({ status: 'error', message: 'This email is already registered.' }, { status: 409 });
-}
+    if (!d) {
+      return NextResponse.json({ status: 'error', message: 'Verification session expired. Please continue again from your artisan account.' }, { status: 410 });
+    }
+    const session = await getSession();
+    if (!session || session.role !== 'artisan' || session.email.toLowerCase() !== (d.email ?? '').toLowerCase()) {
+      return NextResponse.json({ status: 'error', message: 'Sign in to the artisan account that started this verification.' }, { status: 401 });
+    }
+    const existingArtisan = await getArtisanByEmail(session.email);
+    if (!existingArtisan || existingArtisan.id !== session.id) {
+      return NextResponse.json({ status: 'error', message: 'Your artisan profile could not be found.' }, { status: 404 });
+    }
 
     const idType = (d.id_type ?? '').trim();
     if (!VALID_ARTISAN_ID_TYPES.some((acceptedType) => acceptedType === idType)) {
@@ -295,15 +298,11 @@ if (await findUserByEmail(d.email ?? '')) {
       notes.push('Document upload failed; an admin may contact you for re-submission.');
       if (e instanceof Error) notes.push(`(${e.message})`);
     }
-    // Hash the password before saving the artisan account.
-const passwordHash = await hashPassword(d.password ?? '');
-
-    // ---- 5. Create the pending artisan ----
     // ---- 5. Create the pending artisan ----
 const artisanId = await createArtisan({
   name: d.name ?? '',
   email: d.email ?? '',
-  password: passwordHash,
+  password: '',
   phone: d.phone ?? '',
   location: d.location ?? '',
   craft_type: craftType,
@@ -354,6 +353,15 @@ await logActivity({
       duplicate_of: duplicateOf,
     });
   } catch (e) {
-    return NextResponse.json({ status: 'error', message: e instanceof Error ? `Registration failed: ${e.message}` : 'Registration failed. Please try again.' }, { status: 500 });
+    const code = typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
+    const constraint = typeof e === 'object' && e !== null && 'constraint' in e ? e.constraint : undefined;
+    if (code === '23505' && constraint === 'artisans_id_number_key') {
+      return NextResponse.json(
+        { status: 'error', message: 'This government ID number is already associated with an artisan application. Check the number, or contact support if you believe this is a mistake.' },
+        { status: 409 }
+      );
+    }
+    console.error('Artisan registration failed:', e);
+    return NextResponse.json({ status: 'error', message: 'Registration failed. Please try again.' }, { status: 500 });
   }
 }

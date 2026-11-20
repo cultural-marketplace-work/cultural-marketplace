@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { findUserByEmail } from '@/lib/db';
+import { getArtisan, getArtisanByEmail } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 import { sealPending } from '@/lib/pendingToken';
 import { VALID_ARTISAN_ID_TYPES } from '@/lib/validArtisanIdTypes';
 
@@ -8,7 +9,6 @@ import { VALID_ARTISAN_ID_TYPES } from '@/lib/validArtisanIdTypes';
 const FIELDS = [
   'name',
   'email',
-  'password',
   'phone',
   'location',
   'id_type',
@@ -25,11 +25,19 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Record<string, string>;
     const name = (body.name ?? '').trim();
     const email = (body.email ?? '').trim();
-    const password = body.password ?? '';
     const idType = (body.id_type ?? '').trim();
     const address = (body.location ?? '').trim();
-    if (!name || !email || !password) {
-      return NextResponse.json({ status: 'error', message: 'Please complete all required fields.' }, { status: 400 });
+    const session = await getSession();
+    if (!session || session.role !== 'artisan' || session.email.toLowerCase() !== email.toLowerCase()) {
+      return NextResponse.json({ status: 'error', message: 'Sign in to your artisan account before submitting verification.' }, { status: 401 });
+    }
+    const user = await getArtisan(session.id);
+    const artisan = await getArtisanByEmail(session.email);
+    if (!user || !artisan) {
+      return NextResponse.json({ status: 'error', message: 'Your artisan account could not be found.' }, { status: 404 });
+    }
+    if (!name || name !== user.name) {
+      return NextResponse.json({ status: 'error', message: 'Your account name could not be verified.' }, { status: 400 });
     }
     if (!VALID_ARTISAN_ID_TYPES.some((acceptedType) => acceptedType === idType)) {
       return NextResponse.json({ status: 'error', message: 'Choose one of the accepted ID types.' }, { status: 400 });
@@ -45,14 +53,13 @@ export async function POST(req: Request) {
       : randomBytes(1)[0] % 2 === 0
         ? ['blink_twice', 'turn_both_sides']
         : ['turn_both_sides', 'blink_twice'];
-    if (await findUserByEmail(email)) {
-      return NextResponse.json({ status: 'error', message: 'This email is already registered.' }, { status: 409 });
-    }
-
     const data: Record<string, string> = {};
     for (const f of FIELDS) {
       if (typeof body[f] === 'string') data[f] = body[f];
     }
+    data.name = user.name;
+    data.email = user.email;
+    data.phone = user.phone ?? '';
     data.id_type = idType;
     data.location = address;
     data.liveness_challenge_order = challengeOrder.join(',');

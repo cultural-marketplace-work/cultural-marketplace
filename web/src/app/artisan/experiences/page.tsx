@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listArtisanProducts, listBookings } from '@/lib/db';
 import ExperiencesClient from './ExperiencesClient';
 
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanExperiencesPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/experiences');
+  await requireVerifiedArtisan(session.id);
 
   const [products, bookings] = await Promise.all([
     listArtisanProducts(session.id),

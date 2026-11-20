@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listBookings } from '@/lib/db';
 import BookingsClient from './BookingsClient';
 
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanBookingsPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/bookings');
+  await requireVerifiedArtisan(session.id);
 
   const bookings = await listBookings(session.id);
   return (

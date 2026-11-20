@@ -25,7 +25,8 @@ create table if not exists users (
   bio             text,
   created_at      timestamptz default now(),
   updated_at      timestamptz default now(),
-  reg_date        timestamptz default now()
+  reg_date        timestamptz default now(),
+  account_deleted_at timestamptz
 );
 
 -- ----------------------------------------------------------------------------
@@ -48,12 +49,14 @@ create table if not exists artisans (
   product_sample_2_path  text,
   verification_status    text not null default 'pending'
                          check (verification_status in ('pending','approved','rejected','suspended')),
+  application_submitted  boolean not null default true,
   profile_picture        text,
   bio                    text,
   phone                  varchar(30),
   reg_date               timestamptz default now(),
   created_at             timestamptz default now(),
-  updated_at             timestamptz default now()
+  updated_at             timestamptz default now(),
+  account_deleted_at     timestamptz
 );
 
 create table if not exists customers (

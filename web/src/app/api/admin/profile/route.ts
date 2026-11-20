@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { verifyPassword, updateCustomer, logActivity, findUserByEmail, hashPassword } from '@/lib/db';
-import { sql, usingPg } from '@/lib/dbPg';
+import { verifyPassword, updateAdminProfile, logActivity, findUserByEmail, hashPassword } from '@/lib/db';
+import { setPasswordByEmail } from '@/lib/passwordReset';
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -10,12 +10,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as { action: 'update' | 'password'; name?: string; phone?: string; current_password?: string; new_password?: string };
 
   if (body.action === 'update') {
-    if (usingPg) {
-      await sql`update admins set name = coalesce(${body.name ?? null}, name) where email = ${session.email}`;
-      await sql`update users set name = coalesce(${body.name ?? null}, name), phone = coalesce(${body.phone ?? null}, phone) where id = ${session.id} and role = 'admin'`;
-    } else {
-      await updateCustomer(session.id, { name: body.name, phone: body.phone });
-    }
+    await updateAdminProfile(session.id, { name: body.name, phone: body.phone });
     await logActivity({ userId: session.id, role: 'admin', userName: session.name, action: 'profile_update', description: `Admin updated their profile` });
     return NextResponse.json({ status: 'success' });
   }
@@ -29,24 +24,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'error', message: 'Current password is incorrect.' }, { status: 400 });
     }
     const hash = await hashPassword(body.new_password);
-    if (usingPg) {
-      await sql`update admins set password = ${hash} where email = ${session.email}`;
-      await sql`update users set password = ${hash} where id = ${session.id} and role = 'admin'`;
-    } else {
-      await updateCustomer(session.id, {} as never); // demo store: hash handled below
-      const { store: _ignored } = await import('@/lib/db');
-      void _ignored;
-      // fall through to users-table update via updateCustomer is not enough; do direct:
-      const { hashPasswordAdmin } = await import('@/lib/adminDb');
-      void hashPasswordAdmin;
-      // In demo mode, mutate the global store directly:
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const g = globalThis as unknown as { __cmDemoStore?: any };
-      if (g.__cmDemoStore) {
-        const u = g.__cmDemoStore.users.find((x: { id: number }) => x.id === session.id);
-        if (u) u.password = hash;
-      }
-    }
+    await setPasswordByEmail(session.email, hash);
     await logActivity({ userId: session.id, role: 'admin', userName: session.name, action: 'password_change', description: `Admin changed their password` });
     return NextResponse.json({ status: 'success' });
   }
