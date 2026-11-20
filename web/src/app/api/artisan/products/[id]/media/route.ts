@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { getProduct } from '@/lib/db';
 import { uploadFile, objectPath } from '@/lib/storage';
 import { moderateUpload } from '@/lib/imageModeration';
@@ -36,7 +36,7 @@ function parseGallery(value: unknown): string[] {
 
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') {
     return NextResponse.json({ status: 'error', message: 'Unauthorized' }, { status: 401 });
   }
@@ -145,7 +145,7 @@ export async function GET() {
 }
 
 export async function DELETE(req: Request) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') {
     return NextResponse.json({ status: 'error', message: 'Unauthorized' }, { status: 401 });
   }

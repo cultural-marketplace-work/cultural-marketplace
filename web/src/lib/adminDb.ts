@@ -7,6 +7,7 @@ import {
 } from './seed';
 import { sql, tsString, parseJsonish } from './dbPg';
 import { invalidate } from './cache';
+import { deleteStoredFiles } from './storage';
 import type {
   Product, Artisan, Order, OrderItem, Address, Report, ExperienceBooking,
   CustomerRow, ArtisanAnalytics,
@@ -21,9 +22,14 @@ export const usingPg = DATABASE_URL.length > 0;
 // Demo store extension (shares the global with db.ts's store)
 // ---------------------------------------------------------------------------
 interface AdminDemoStore {
-  users: Array<{ id: number; name: string; email: string; password: string; role: string; location: string | null; phone: string | null; profile_picture: string | null; bio?: string | null; disabled?: boolean }>;
+  users: Array<{ id: number; name: string; email: string; password: string; role: string; location: string | null; phone: string | null; profile_picture: string | null; bio?: string | null; disabled?: boolean; account_deleted_at?: string | null }>;
   artisans: Array<Artisan & { password: string; dob?: string | null; disabled?: boolean }>;
-  order_items: Array<OrderItem & { review_visible?: boolean }>;
+  order_items: Array<OrderItem & {
+    review_visible?: boolean;
+    proof_of_receipt?: string | null;
+    attendee_contact?: string | null;
+    attendee_note?: string | null;
+  }>;
   reports: Report[];
   addresses: Address[];
   categories: Array<{ id: number; name: string; type: string }>;
@@ -39,7 +45,6 @@ function store(): AdminDemoStore {
       users: [
         ...seedUsers.map((u) => ({ ...u })),
         { id: 9001, name: 'mark john (demo)', email: 'customer@demo.local', password: DEMO_PASSWORD_HASH, role: 'customer', location: 'Bunawan, Agusan del Sur', phone: '09000000000', profile_picture: null },
-        { id: 10, name: 'John Mark Belar (demo)', email: 'artisan@demo.local', password: DEMO_PASSWORD_HASH, role: 'artisan', location: 'Bunawan, Agusan del Sur', phone: '09078813630', profile_picture: null },
         { id: 9002, name: 'System Administrator (demo)', email: 'admin@demo.local', password: DEMO_PASSWORD_HASH, role: 'admin', location: null, phone: null, profile_picture: null },
       ],
       artisans: [],
@@ -85,6 +90,32 @@ function syncFromCore(): void {
 
 function n(v: unknown): number { return typeof v === 'number' ? v : Number(v ?? 0); }
 
+export interface DeleteAccountResult {
+  deleted: boolean;
+  warning?: string;
+}
+
+function deletedEmail(kind: 'customer' | 'artisan', id: number): string {
+  return `deleted-${kind}-${id}-${crypto.randomUUID()}@deleted.invalid`;
+}
+
+function collectStoredPaths(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStoredPaths);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(collectStoredPaths);
+  return [];
+}
+
+async function cleanupStoredFiles(paths: string[]): Promise<string | undefined> {
+  try {
+    await deleteStoredFiles(paths);
+    return undefined;
+  } catch (error) {
+    console.error('Stored media cleanup failed after account anonymization:', error);
+    return 'Account data was anonymized, but some stored files could not be removed. Review the server logs for details.';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Customers (admin)
 // ---------------------------------------------------------------------------
@@ -94,7 +125,7 @@ export async function listCustomers(): Promise<CustomerRow[]> {
     const rows = await sql`
       select u.id, u.name, u.email, u.phone, u.location, u.created_at,
         (select count(*) from orders o where o.customer_id = u.id) as order_count
-      from users u where u.role = 'customer' order by u.created_at desc nulls last`;
+      from users u where u.role = 'customer' and u.account_deleted_at is null order by u.created_at desc nulls last`;
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
       id: n(r.id), name: String(r.name), email: String(r.email),
       phone: (r.phone as string) ?? null, location: (r.location as string) ?? null,
@@ -103,7 +134,7 @@ export async function listCustomers(): Promise<CustomerRow[]> {
     }));
   }
   return store().users
-    .filter((u) => u.role === 'customer')
+    .filter((u) => u.role === 'customer' && !u.account_deleted_at)
     .map((u) => ({
       id: u.id, name: u.name, email: u.email, phone: u.phone, location: u.location,
       order_count: store().orders.filter((o) => o.customer_id === u.id).length,
@@ -128,55 +159,192 @@ export async function updateCustomer(id: number, p: { name?: string; email?: str
   return true;
 }
 
-export async function deleteCustomer(id: number): Promise<boolean> {
+export async function deleteCustomer(id: number): Promise<DeleteAccountResult> {
+  syncFromCore();
+  let mediaPaths: string[] = [];
   if (usingPg) {
-    return sql.begin(async (tx) => {
-      const customer = await tx`select id from users where id = ${id} and role = 'customer' for update`;
-      if (!customer.length) return false;
+    const deleted = await sql.begin(async (tx) => {
+      const customerRows = await tx`select id, email, profile_picture from users where id = ${id} and role = 'customer' and account_deleted_at is null for update`;
+      if (!customerRows.length) return false;
+      const customer = customerRows[0] as Record<string, unknown>;
+      const email = String(customer.email);
+      mediaPaths = collectStoredPaths(customer.profile_picture);
 
-      await tx`delete from reports where reporter_id = ${id}`;
-      await tx`delete from orders where customer_id = ${id}`;
-      await tx`delete from users where id = ${id} and role = 'customer'`;
+      const receipts = await tx`select payment_receipt from orders where customer_id = ${id}`;
+      const proofs = await tx`
+        select oi.proof_of_receipt
+        from order_items oi join orders o on o.id = oi.order_id
+        where o.customer_id = ${id}`;
+      mediaPaths.push(...receipts.flatMap((row) => collectStoredPaths((row as Record<string, unknown>).payment_receipt)));
+      mediaPaths.push(...proofs.flatMap((row) => collectStoredPaths((row as Record<string, unknown>).proof_of_receipt)));
+
+      await tx`delete from cart_items where customer_id = ${id}`;
+      await tx`delete from customer_addresses where customer_id = ${id}`;
+      await tx`delete from chat_conversations where customer_id = ${id}`;
+      await tx`delete from notifications where user_id = ${id}`;
+      await tx`delete from pending_registrations where lower(email) = ${email.toLowerCase()}`;
+
+      await tx`
+        update orders
+        set shipping_address = 'Removed after account deletion',
+            notes = null,
+            payment_receipt = null
+        where customer_id = ${id}`;
+      await tx`
+        update order_items oi
+        set attendee_name = null,
+            attendee_contact = null,
+            attendee_note = null,
+            ticket_code = null,
+            review_comment = null,
+            proof_of_receipt = null
+        from orders o
+        where oi.order_id = o.id and o.customer_id = ${id}`;
+      await tx`
+        update shipments
+        set recipient_name = 'Deleted customer',
+            recipient_phone = '',
+            recipient_address = 'Removed after account deletion',
+            notes = null
+        where customer_id = ${id}`;
+      await tx`
+        update reports
+        set reason = 'Report details removed after account deletion'
+        where reporter_id = ${id}`;
+      await tx`
+        update activity_logs
+        set user_id = null,
+            user_role = 'system',
+            user_name = 'Deleted customer',
+            action = 'account_deleted',
+            description = 'Activity details removed after account deletion',
+            ip_address = ''
+        where user_id = ${id} and user_role = 'customer'`;
+      await tx`
+        update users
+        set name = 'Deleted customer',
+            email = ${deletedEmail('customer', id)},
+            password = ${await hashPasswordAdmin(crypto.randomUUID())},
+            location = null,
+            phone = null,
+            otp_code = null,
+            otp_expires_at = null,
+            is_verified = false,
+            profile_picture = null,
+            bio = null,
+            account_deleted_at = now()
+        where id = ${id} and role = 'customer'`;
       return true;
     });
+    if (!deleted) return { deleted: false };
+    invalidate('users*');
+    invalidate('admin:stats');
+    const warning = await cleanupStoredFiles(mediaPaths);
+    return { deleted: true, warning };
   }
 
   const s = store();
-  if (!s.users.some((u) => u.id === id && u.role === 'customer')) return false;
-
+  const customer = s.users.find((u) => u.id === id && u.role === 'customer' && !u.account_deleted_at);
+  if (!customer) return { deleted: false };
+  const email = customer.email;
   const orderIds = new Set(s.orders.filter((order) => order.customer_id === id).map((order) => order.id));
   const core = (globalThis as unknown as {
     __cmDemoStore?: {
-      users: Array<{ id: number; role: string }>;
-      orders: Array<{ id: number; customer_id: number }>;
-      order_items: Array<{ order_id: number }>;
+      users: Array<{ id: number; role: string; email: string; name: string; password: string; phone?: string | null; location?: string | null; profile_picture?: string | null; account_deleted_at?: string | null }>;
+      orders: Array<{ id: number; customer_id: number; shipping_address?: string | null; notes?: string | null; payment_receipt?: string | null }>;
+      order_items: Array<{ order_id: number; attendee_name?: string | null; attendee_contact?: string | null; attendee_note?: string | null; ticket_code?: string | null; review_comment?: string | null; proof_of_receipt?: string | null }>;
       cart_items: Array<{ customer_id: number }>;
       chat_conversations: Array<{ id: number; customer_id: number }>;
       chat_messages: Array<{ conversation_id: number }>;
-      notifications: Array<{ user_id: number }>;
-      shipments: Array<{ customer_id: number; order_id: number }>;
+      notifications: Array<{ user_id: number | null; artisan_id?: number | null; user_role?: string }>;
+      shipments: Array<{ customer_id: number; recipient_name: string; recipient_phone: string; recipient_address: string; notes: string | null }>;
+      activity_logs: Array<{ user_id: number | null; user_role: string; user_name: string; action: string; description: string; ip_address?: string }>;
     };
   }).__cmDemoStore;
+
+  mediaPaths.push(...collectStoredPaths(customer.profile_picture));
+  for (const order of s.orders.filter((entry) => entry.customer_id === id)) {
+    mediaPaths.push(...collectStoredPaths(order.payment_receipt));
+    order.shipping_address = 'Removed after account deletion';
+    order.notes = null;
+    order.payment_receipt = null;
+  }
+  for (const item of s.order_items.filter((entry) => orderIds.has(entry.order_id))) {
+    mediaPaths.push(...collectStoredPaths(item.proof_of_receipt));
+    item.attendee_name = null;
+    item.attendee_contact = null;
+    item.attendee_note = null;
+    item.ticket_code = null;
+    item.review_comment = null;
+    item.proof_of_receipt = null;
+  }
+  customer.name = 'Deleted customer';
+  customer.email = deletedEmail('customer', id);
+  customer.password = await hashPasswordAdmin(crypto.randomUUID());
+  customer.location = null;
+  customer.phone = null;
+  customer.profile_picture = null;
+  customer.bio = null;
+  customer.account_deleted_at = new Date().toISOString();
 
   if (core) {
     const coreOrderIds = new Set(core.orders.filter((order) => order.customer_id === id).map((order) => order.id));
     const conversationIds = new Set(core.chat_conversations.filter((conversation) => conversation.customer_id === id).map((conversation) => conversation.id));
-    core.users = core.users.filter((user) => user.id !== id || user.role !== 'customer');
-    core.orders = core.orders.filter((order) => order.customer_id !== id);
-    core.order_items = core.order_items.filter((item) => !coreOrderIds.has(item.order_id));
+    const coreUser = core.users.find((user) => user.id === id && user.role === 'customer');
+    if (coreUser) {
+      coreUser.name = 'Deleted customer';
+      coreUser.email = customer.email;
+      coreUser.password = customer.password;
+      coreUser.phone = null;
+      coreUser.location = null;
+      coreUser.profile_picture = null;
+      coreUser.account_deleted_at = customer.account_deleted_at;
+    }
+    for (const order of core.orders.filter((entry) => entry.customer_id === id)) {
+      mediaPaths.push(...collectStoredPaths(order.payment_receipt));
+      order.shipping_address = 'Removed after account deletion';
+      order.notes = null;
+      order.payment_receipt = null;
+    }
+    for (const item of core.order_items.filter((entry) => coreOrderIds.has(entry.order_id))) {
+      mediaPaths.push(...collectStoredPaths(item.proof_of_receipt));
+      item.attendee_name = null;
+      item.attendee_contact = null;
+      item.attendee_note = null;
+      item.ticket_code = null;
+      item.review_comment = null;
+      item.proof_of_receipt = null;
+    }
     core.cart_items = core.cart_items.filter((item) => item.customer_id !== id);
     core.chat_conversations = core.chat_conversations.filter((conversation) => conversation.customer_id !== id);
     core.chat_messages = core.chat_messages.filter((message) => !conversationIds.has(message.conversation_id));
     core.notifications = core.notifications.filter((notification) => notification.user_id !== id);
-    core.shipments = core.shipments.filter((shipment) => shipment.customer_id !== id && !coreOrderIds.has(shipment.order_id));
+    for (const shipment of core.shipments.filter((entry) => entry.customer_id === id)) {
+      shipment.recipient_name = 'Deleted customer';
+      shipment.recipient_phone = '';
+      shipment.recipient_address = 'Removed after account deletion';
+      shipment.notes = null;
+    }
+    for (const log of core.activity_logs.filter((entry) => entry.user_id === id)) {
+      if (log.user_role !== 'customer') continue;
+      log.user_id = null;
+      log.user_role = 'system';
+      log.user_name = 'Deleted customer';
+      log.action = 'account_deleted';
+      log.description = 'Activity details removed after account deletion';
+      log.ip_address = '';
+    }
   }
 
-  s.users = s.users.filter((user) => user.id !== id || user.role !== 'customer');
-  s.orders = s.orders.filter((order) => order.customer_id !== id);
-  s.order_items = s.order_items.filter((item) => !orderIds.has(item.order_id));
-  s.reports = s.reports.filter((report) => report.reporter_id !== id);
+  for (const report of s.reports.filter((entry) => entry.reporter_id === id)) {
+    report.reason = 'Report details removed after account deletion';
+    report.reporter_name = null;
+  }
   s.addresses = s.addresses.filter((address) => address.customer_id !== id);
-  return true;
+  invalidate('users*');
+  invalidate('admin:stats');
+  const warning = await cleanupStoredFiles(mediaPaths);
+  return { deleted: true, warning };
 }
 
 export async function toggleCustomerStatus(id: number): Promise<void> {
@@ -205,7 +373,7 @@ export async function getArtisanFull(id: number): Promise<(Artisan & { id_number
         r.registration_notes as verification_registration_notes
       from artisans a
       left join artisan_verification_results r on r.artisan_id = a.id
-      where a.id = ${id}
+      where a.id = ${id} and a.account_deleted_at is null
       limit 1`;
     if (!rows.length) return null;
     const row = rows[0] as unknown as Record<string, unknown>;
@@ -220,17 +388,17 @@ export async function getArtisanFull(id: number): Promise<(Artisan & { id_number
       registration_notes: (row.verification_registration_notes as string | null) ?? (row.registration_notes as string | null) ?? null,
     } as Artisan & Record<string, unknown>;
   }
-  const a = store().artisans.find((x) => x.id === id);
+  const a = store().artisans.find((x) => x.id === id && !x.account_deleted_at);
   return a ? { ...a } : null;
 }
 
 export async function listAllArtisansAdmin(): Promise<Artisan[]> {
   syncFromCore();
   if (usingPg) {
-    const rows = await sql`select * from artisans order by created_at desc`;
+    const rows = await sql`select * from artisans where account_deleted_at is null order by created_at desc`;
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({ ...r, created_at: tsString(r.created_at) })) as unknown as Artisan[];
   }
-  return [...store().artisans];
+  return store().artisans.filter((artisan) => !artisan.account_deleted_at);
 }
 
 export async function updateArtisan(id: number, p: { name?: string; email?: string; phone?: string; location?: string; craft_type?: string; business_name?: string; bio?: string }): Promise<void> {
@@ -252,13 +420,307 @@ export async function updateArtisan(id: number, p: { name?: string; email?: stri
   invalidate('artisans*');
 }
 
-export async function deleteArtisan(id: number): Promise<void> {
+export async function deleteArtisan(id: number): Promise<DeleteAccountResult> {
+  syncFromCore();
+  let mediaPaths: string[] = [];
   if (usingPg) {
-    await sql`delete from artisans where id = ${id}`;
-    return;
+    const deleted = await sql.begin(async (tx) => {
+      const artisanRows = await tx`select * from artisans where id = ${id} and account_deleted_at is null for update`;
+      if (!artisanRows.length) return false;
+      const artisan = artisanRows[0] as Record<string, unknown>;
+      const email = String(artisan.email);
+      const replacementEmail = deletedEmail('artisan', id);
+      mediaPaths.push(
+        ...collectStoredPaths(artisan.profile_picture),
+        ...collectStoredPaths(artisan.selfie_path),
+        ...collectStoredPaths(artisan.id_document_path),
+        ...collectStoredPaths(artisan.id_document_back_path),
+        ...collectStoredPaths(artisan.proof_of_craft_path),
+        ...collectStoredPaths(artisan.product_sample_1_path),
+        ...collectStoredPaths(artisan.product_sample_2_path),
+        ...collectStoredPaths(artisan.affiliation_document_path),
+      );
+
+      const products = await tx`
+        select image_path, image_2_path, image_3_path, image_4_path, product_gallery, video_path, tutorial_gallery
+        from products where artisan_id = ${id}`;
+      for (const product of products) {
+        const row = product as Record<string, unknown>;
+        mediaPaths.push(
+          ...collectStoredPaths(row.image_path),
+          ...collectStoredPaths(row.image_2_path),
+          ...collectStoredPaths(row.image_3_path),
+          ...collectStoredPaths(row.image_4_path),
+          ...collectStoredPaths(row.product_gallery),
+          ...collectStoredPaths(row.video_path),
+          ...collectStoredPaths(row.tutorial_gallery),
+        );
+      }
+
+      const orderItemProofs = await tx`select proof_of_receipt from order_items where artisan_id = ${id}`;
+      mediaPaths.push(...orderItemProofs.flatMap((row) => collectStoredPaths((row as Record<string, unknown>).proof_of_receipt)));
+
+      await tx`delete from chat_conversations where artisan_id = ${id}`;
+      await tx`delete from face_embeddings where artisan_id = ${id}`;
+      await tx`delete from artisan_verification_results where artisan_id = ${id}`;
+      await tx`delete from face_verification_logs where artisan_id = ${id} or lower(email) = ${email.toLowerCase()}`;
+      await tx`
+        update shipments
+        set sender_name = 'Deleted artisan',
+            sender_phone = '',
+            sender_address = 'Removed after account deletion',
+            items_summary = 'Deleted artisan product',
+            notes = null
+        where artisan_id = ${id}`;
+      await tx`
+        update order_items
+        set product_name = 'Deleted artisan product',
+            review_comment = null,
+            proof_of_receipt = null
+        where artisan_id = ${id}`;
+      await tx`
+        update reports
+        set reason = 'Report details removed after artisan account deletion'
+        where (reported_type = 'artisan' and reported_id = ${id})
+           or (reported_type in ('product', 'experience') and reported_id in (select id from products where artisan_id = ${id}))`;
+
+      await tx`
+        update products
+        set name = 'Deleted artisan product',
+            description = null,
+            category = null,
+            image_path = null,
+            image_2_path = null,
+            image_3_path = null,
+            image_4_path = null,
+            product_gallery = '[]'::jsonb,
+            video_path = null,
+            status = 'inactive',
+            nfc_tag_id = null,
+            nfc_tag_status = null,
+            nfc_tag_history = null,
+            has_tutorial = false,
+            tutorial_date = null,
+            tutorial_price = null,
+            tutorial_capacity = null,
+            tutorial_location = null,
+            tutorial_lat = null,
+            tutorial_lng = null,
+            materials_used = null,
+            attributes = null,
+            has_variations = false,
+            variation_pricing = false,
+            variations_data = null,
+            tutorial_title = null,
+            tutorial_description = null,
+            tutorial_dates = null,
+            tutorial_time = null,
+            tutorial_venue_barangay = null,
+            tutorial_venue_municipality = null,
+            tutorial_venue_street = null,
+            tutorial_venue_meeting_place = null,
+            tutorial_fee_type = null,
+            tutorial_gallery = null,
+            tutorial_learnings = null,
+            tutorial_things_to_bring = null,
+            tutorial_status = null,
+            stock_quantity = 0
+        where artisan_id = ${id}`;
+
+      await tx`delete from notifications where artisan_id = ${id} and user_role = 'artisan'`;
+      await tx`delete from pending_registrations where lower(email) = ${email.toLowerCase()}`;
+      await tx`
+        update activity_logs
+        set user_id = null,
+            user_role = 'system',
+            user_name = 'Deleted artisan',
+            action = 'account_deleted',
+            description = 'Activity details removed after account deletion',
+            ip_address = ''
+        where user_id = ${id} and user_role = 'artisan'`;
+      await tx`
+        update artisans
+        set name = 'Deleted artisan',
+            email = ${replacementEmail},
+            password = ${await hashPasswordAdmin(crypto.randomUUID())},
+            location = null,
+            business_name = null,
+            craft_type = null,
+            dob = null,
+            id_type = null,
+            indigenous_affiliation = null,
+            id_document_path = null,
+            id_document_back_path = null,
+            id_number = null,
+            proof_of_craft_path = null,
+            product_sample_1_path = null,
+            product_sample_2_path = null,
+            selfie_path = null,
+            affiliation_document_path = null,
+            verification_status = 'suspended',
+            application_submitted = false,
+            profile_picture = null,
+            bio = null,
+            phone = null,
+            face_matched = null,
+            face_confidence = null,
+            registration_notes = null,
+            account_deleted_at = now()
+        where id = ${id}`;
+      return true;
+    });
+    if (!deleted) return { deleted: false };
+    invalidate('admin:stats');
+    invalidate('artisans*');
+    invalidate('artisan:*');
+    invalidate('products:active:default');
+    const warning = await cleanupStoredFiles(mediaPaths);
+    return { deleted: true, warning };
   }
+
+  syncFromCore();
   const s = store();
-  s.artisans = s.artisans.filter((a) => a.id !== id);
+  const artisan = s.artisans.find((entry) => entry.id === id && !entry.account_deleted_at);
+  if (!artisan) return { deleted: false };
+  mediaPaths.push(
+    ...collectStoredPaths(artisan.profile_picture),
+    ...collectStoredPaths(artisan.selfie_path),
+    ...collectStoredPaths(artisan.id_document_path),
+    ...collectStoredPaths(artisan.id_document_back_path),
+    ...collectStoredPaths(artisan.proof_of_craft_path),
+    ...collectStoredPaths(artisan.product_sample_1_path),
+    ...collectStoredPaths(artisan.product_sample_2_path),
+    ...collectStoredPaths(artisan.affiliation_document_path),
+  );
+  const replacementEmail = deletedEmail('artisan', id);
+  const password = await hashPasswordAdmin(crypto.randomUUID());
+  const deletedAt = new Date().toISOString();
+  Object.assign(artisan, {
+    name: 'Deleted artisan',
+    email: replacementEmail,
+    password,
+    location: null,
+    business_name: null,
+    craft_type: null,
+    dob: null,
+    id_type: null,
+    indigenous_affiliation: null,
+    id_number: null,
+    id_document_path: null,
+    id_document_back_path: null,
+    proof_of_craft_path: null,
+    product_sample_1_path: null,
+    product_sample_2_path: null,
+    selfie_path: null,
+    affiliation_document_path: null,
+    verification_status: 'suspended',
+    application_submitted: false,
+    profile_picture: null,
+    bio: null,
+    phone: null,
+    face_matched: null,
+    face_confidence: null,
+    registration_notes: null,
+    account_deleted_at: deletedAt,
+  });
+  const core = (globalThis as unknown as {
+    __cmDemoStore?: {
+      artisans: Array<Artisan & { password: string }>;
+      products: Product[];
+      order_items: Array<OrderItem & { proof_of_receipt?: string | null }>;
+      shipments: Array<{ artisan_id: number; sender_name: string; sender_phone: string; sender_address: string; items_summary: string; notes: string | null }>;
+      notifications: Array<{ user_id: number | null; artisan_id?: number | null; user_role: string }>;
+      chat_conversations: Array<{ id: number; artisan_id: number }>;
+      chat_messages: Array<{ conversation_id: number }>;
+      activity_logs: Array<{ user_id: number | null; user_role: string; user_name: string; action: string; description: string; ip_address?: string }>;
+    };
+  }).__cmDemoStore;
+  const ownedProducts = s.products.filter((product) => product.artisan_id === id);
+  for (const product of ownedProducts) {
+    const raw = product as Product & Record<string, unknown>;
+    mediaPaths.push(
+      ...collectStoredPaths(raw.image_path),
+      ...collectStoredPaths(raw.image_2_path),
+      ...collectStoredPaths(raw.image_3_path),
+      ...collectStoredPaths(raw.image_4_path),
+      ...collectStoredPaths(raw.product_gallery),
+      ...collectStoredPaths(raw.video_path),
+      ...collectStoredPaths(raw.tutorial_gallery),
+    );
+    Object.assign(product, {
+      name: 'Deleted artisan product',
+      description: null,
+      category: null,
+      image_path: null,
+      product_gallery: null,
+      video_path: null,
+      status: 'inactive',
+      nfc_tag_id: null,
+      nfc_tag_status: null,
+      has_tutorial: false,
+      tutorial_title: null,
+      tutorial_description: null,
+      tutorial_dates: null,
+      tutorial_price: null,
+      tutorial_capacity: null,
+      tutorial_location: null,
+      tutorial_lat: null,
+      tutorial_lng: null,
+      tutorial_fee_type: null,
+      tutorial_learnings: null,
+      tutorial_status: null,
+      materials_used: null,
+      has_variations: false,
+      variation_pricing: false,
+      variations_data: null,
+      stock_quantity: 0,
+    });
+    for (const key of ['image_2_path', 'image_3_path', 'image_4_path', 'nfc_tag_history', 'attributes', 'tutorial_time', 'tutorial_venue_barangay', 'tutorial_venue_municipality', 'tutorial_venue_street', 'tutorial_venue_meeting_place', 'tutorial_gallery', 'tutorial_things_to_bring']) raw[key] = null;
+  }
+  for (const item of s.order_items.filter((entry) => entry.artisan_id === id)) {
+    mediaPaths.push(...collectStoredPaths(item.proof_of_receipt));
+    item.product_name = 'Deleted artisan product';
+    item.review_comment = null;
+    item.proof_of_receipt = null;
+  }
+  for (const shipment of (core?.shipments ?? []).filter((entry) => entry.artisan_id === id)) {
+    shipment.sender_name = 'Deleted artisan';
+    shipment.sender_phone = '';
+    shipment.sender_address = 'Removed after account deletion';
+    shipment.items_summary = 'Deleted artisan product';
+    shipment.notes = null;
+  }
+  if (core) {
+    core.notifications = core.notifications.filter((notification) =>
+      notification.user_role !== 'artisan' || notification.artisan_id !== id
+    );
+    for (const log of core.activity_logs.filter((entry) => entry.user_id === id && entry.user_role === 'artisan')) {
+      log.user_id = null;
+      log.user_role = 'system';
+      log.user_name = 'Deleted artisan';
+      log.action = 'account_deleted';
+      log.description = 'Activity details removed after account deletion';
+      log.ip_address = '';
+    }
+    core.artisans = s.artisans;
+    core.products = s.products;
+    core.order_items = s.order_items;
+    const conversationIds = new Set(core.chat_conversations.filter((conversation) => conversation.artisan_id === id).map((conversation) => conversation.id));
+    core.chat_conversations = core.chat_conversations.filter((conversation) => conversation.artisan_id !== id);
+    core.chat_messages = core.chat_messages.filter((message) => !conversationIds.has(message.conversation_id));
+  }
+  for (const report of s.reports.filter((entry) =>
+    (entry.reported_type === 'artisan' && entry.reported_id === id) ||
+    ((entry.reported_type === 'product' || entry.reported_type === 'experience') && ownedProducts.some((product) => product.id === entry.reported_id)))) {
+    report.reason = 'Report details removed after artisan account deletion';
+    report.reported_name = 'Deleted artisan';
+  }
+  invalidate('admin:stats');
+  invalidate('artisans*');
+  invalidate('artisan:*');
+  invalidate('products:active:default');
+  const warning = await cleanupStoredFiles(mediaPaths);
+  return { deleted: true, warning };
 }
 
 // ---------------------------------------------------------------------------
@@ -745,27 +1207,11 @@ export async function updateArtisanProfile(id: number, p: { name?: string; phone
       craft_type = coalesce(${p.craft_type ?? null}, craft_type),
       profile_picture = coalesce(${p.profile_picture ?? null}, profile_picture)
       where id = ${id}`;
-    try {
-      await sql`update users set
-        name = coalesce(${p.name ?? null}, name),
-        phone = coalesce(${p.phone ?? null}, phone),
-        location = coalesce(${p.location ?? null}, location),
-        profile_picture = coalesce(${p.profile_picture ?? null}, profile_picture)
-        where id = ${id} and role = 'artisan'`;
-    } catch { /* best-effort mirror */ }
     invalidate('artisans*');
-    invalidate('users*');
     return;
   }
   const a = store().artisans.find((x) => x.id === id);
   if (a) Object.assign(a, Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)));
-  const u = store().users.find((x) => x.id === id || (x.email === a?.email && x.role === 'artisan'));
-  if (u) {
-    if (p.name !== undefined) u.name = p.name;
-    if (p.phone !== undefined) u.phone = p.phone;
-    if (p.location !== undefined) u.location = p.location;
-    if (p.profile_picture !== undefined) u.profile_picture = p.profile_picture;
-  }
 }
 
 // ---------------------------------------------------------------------------

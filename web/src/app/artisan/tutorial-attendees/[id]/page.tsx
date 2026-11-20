@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { getProduct, listAttendees } from '@/lib/db';
 import AttendeesClient from './AttendeesClient';
 
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function TutorialAttendeesPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/experiences');
+  await requireVerifiedArtisan(session.id);
   const { id } = await params;
 
   const product = await getProduct(Number(id));

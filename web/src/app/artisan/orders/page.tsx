@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listArtisanOrders } from '@/lib/db';
 import { listShipmentsForArtisan } from '@/lib/shipments';
 import ArtisanOrdersClient from './ArtisanOrdersClient';
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanOrdersPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/orders');
+  await requireVerifiedArtisan(session.id);
 
   // Parallel: orders + shipments fetched together (LCP — ~100ms per round-trip
   // to Supabase, and these are independent).

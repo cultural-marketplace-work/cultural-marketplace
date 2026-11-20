@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listShipmentsForArtisan } from '@/lib/shipments';
 import ShipmentsClient from './ShipmentsClient';
 
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanShipmentsPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/shipments');
+  await requireVerifiedArtisan(session.id);
 
   const shipments = await listShipmentsForArtisan(session.id);
   return (

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { saveTutorialDates, getProduct } from '@/lib/db';
 import type { TutorialDate } from '@/lib/types';
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') return NextResponse.json({ status: 'error' }, { status: 401 });
 
   const { product_id, dates } = (await req.json()) as { product_id?: number; dates?: TutorialDate[] };

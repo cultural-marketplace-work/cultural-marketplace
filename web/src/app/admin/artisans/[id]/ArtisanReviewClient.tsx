@@ -14,7 +14,7 @@ interface EvidenceItem {
 interface Props {
   artisan: {
     id: number; name: string; email: string; phone: string | null; location: string | null;
-    craft_type: string | null; business_name: string | null; bio: string | null; status: string;
+    craft_type: string | null; business_name: string | null; bio: string | null; status: string; application_submitted: boolean;
     id_number: string | null; id_type: string | null; dob: string | null; has_id_docs: boolean; has_proof: boolean;
     indigenous_affiliation: string | null;
     face_matched: boolean | null; face_confidence: number | null; duplicate_face_match: boolean | null;
@@ -72,14 +72,27 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
   }
 
   async function remove() {
-    if (!confirm(`Delete artisan ${artisan.name} and all their products? This cannot be undone.`)) return;
+    if (!confirm(`Delete artisan ${artisan.name}'s account and personal data? Sales records will remain anonymized, and their products will be replaced with generic inactive records. This cannot be undone.`)) return;
     setBusy(true);
-    await fetch('/api/admin/artisans', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', id: artisan.id }),
-    });
-    router.push('/admin/artisans');
+    setMsg('');
+    try {
+      const res = await fetch('/api/admin/artisans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: artisan.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.status !== 'success') {
+        setMsg(data.message ?? 'Could not delete artisan.');
+        setBusy(false);
+        return;
+      }
+      if (data.warning) alert(data.warning);
+      router.push('/admin/artisans');
+    } catch {
+      setMsg('Unable to delete artisan. Please try again.');
+      setBusy(false);
+    }
   }
 
   return (
@@ -163,10 +176,15 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
           {artisan.registration_notes && (
             <p className="mt-3 rounded-lg bg-stone-50 p-3 text-xs text-stone-600">{artisan.registration_notes}</p>
           )}
+          {!artisan.application_submitted && (
+            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              This artisan has registered but has not submitted verification. Approval and rejection are unavailable until an application is submitted.
+            </p>
+          )}
           <div className="mt-4 flex flex-wrap gap-2">
-            {form.status !== 'approved' && <button className="btn-primary px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('approved')}>Approve</button>}
-            {form.status !== 'suspended' && <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('suspended')}>Suspend</button>}
-            {form.status !== 'rejected' && <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('rejected')}>Reject</button>}
+            {artisan.application_submitted && form.status !== 'approved' && <button className="btn-primary px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('approved')}>Approve</button>}
+            {artisan.application_submitted && form.status !== 'suspended' && <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('suspended')}>Suspend</button>}
+            {artisan.application_submitted && form.status !== 'rejected' && <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('rejected')}>Reject</button>}
             <button className="btn-danger px-3 py-1 text-xs" disabled={busy} onClick={remove}>Delete</button>
           </div>
         </div>

@@ -15,6 +15,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>;
   const action = body.action;
   const id = Number(body.id);
+  let warning: string | undefined;
   if (!Number.isSafeInteger(id) || id <= 0) {
     return NextResponse.json({ status: 'error', message: 'Invalid customer.' }, { status: 400 });
   }
@@ -55,14 +56,15 @@ export async function POST(req: Request) {
 
     await logActivity({ userId: session.id, role: 'admin', userName: session.name, action: 'customer_update', description: `Admin updated customer #${id}` });
   } else if (action === 'delete') {
-    let deleted: boolean;
+    let result: Awaited<ReturnType<typeof deleteCustomer>>;
     try {
-      deleted = await deleteCustomer(id);
+      result = await deleteCustomer(id);
     } catch (error) {
       console.error('Admin customer deletion failed:', error);
       return NextResponse.json({ status: 'error', message: 'Could not delete customer and order history.' }, { status: 500 });
     }
-    if (!deleted) return NextResponse.json({ status: 'error', message: 'Customer not found.' }, { status: 404 });
+    if (!result.deleted) return NextResponse.json({ status: 'error', message: 'Customer not found.' }, { status: 404 });
+    warning = result.warning;
 
     await logActivity({ userId: session.id, role: 'admin', userName: session.name, action: 'customer_delete', description: `Admin deleted customer #${id}` });
   } else if (action === 'toggle') {
@@ -71,5 +73,5 @@ export async function POST(req: Request) {
   } else {
     return NextResponse.json({ status: 'error', message: 'Unknown action.' }, { status: 400 });
   }
-  return NextResponse.json({ status: 'success' });
+  return NextResponse.json({ status: 'success', ...(warning ? { warning } : {}) });
 }

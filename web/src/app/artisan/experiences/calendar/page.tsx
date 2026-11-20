@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listArtisanProducts } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanCalendarPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/experiences/calendar');
+  await requireVerifiedArtisan(session.id);
 
   const products = await listArtisanProducts(session.id);
   const sessions = products

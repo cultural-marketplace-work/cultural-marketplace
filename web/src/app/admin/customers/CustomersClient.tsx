@@ -11,11 +11,13 @@ export default function CustomersClient({ initial }: { initial: Row[] }) {
   const [editing, setEditing] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [warning, setWarning] = useState('');
   const [query, setQuery] = useState('');
 
   async function act(action: string, id: number, fields?: Record<string, string>) {
     setBusy(true);
     setMsg('');
+    setWarning('');
     try {
       const res = await fetch('/api/admin/customers', {
         method: 'POST',
@@ -28,7 +30,10 @@ export default function CustomersClient({ initial }: { initial: Row[] }) {
         return;
       }
 
-      if (action === 'delete') setRows((rs) => rs.filter((r) => r.id !== id));
+      if (action === 'delete') {
+        setRows((rs) => rs.filter((r) => r.id !== id));
+        setWarning(data.warning ?? '');
+      }
       if (action === 'toggle') setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: r.status === 'active' ? 'disabled' : 'active' } : r)));
       if (action === 'update' && editing) {
         setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...editing } : r)));
@@ -54,6 +59,7 @@ export default function CustomersClient({ initial }: { initial: Row[] }) {
   return (
     <div className="mt-6 space-y-3">
       {msg && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{msg}</p>}
+      {warning && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{warning}</p>}
       <label className="block max-w-xl">
         <span className="sr-only">Search customers</span>
         <input
@@ -99,7 +105,7 @@ export default function CustomersClient({ initial }: { initial: Row[] }) {
               <div className="flex gap-2">
                 <button className="btn-outline px-3 py-1 text-xs" onClick={() => setEditing({ ...c })}>Edit</button>
                 <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => act('toggle', c.id)}>{c.status === 'active' ? 'Disable' : 'Enable'}</button>
-                <button className="btn-danger px-3 py-1 text-xs" disabled={busy} onClick={() => { if (confirm(`Delete customer ${c.name} and permanently delete their order history? This cannot be undone.`)) act('delete', c.id); }}>Delete</button>
+                <button className="btn-danger px-3 py-1 text-xs" disabled={busy} onClick={() => { if (confirm(`Delete ${c.name}'s account and personal data? Order and sales records will remain anonymized for history. This cannot be undone.`)) act('delete', c.id); }}>Delete</button>
               </div>
             </div>
           )}

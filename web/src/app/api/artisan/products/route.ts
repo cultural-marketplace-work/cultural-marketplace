@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { createProduct, listCategories, logActivity, getArtisan, addCategory } from '@/lib/db';
 
 async function resolveCategory(raw: unknown): Promise<{ value: string | null; error?: string }> {
@@ -15,7 +15,7 @@ async function resolveCategory(raw: unknown): Promise<{ value: string | null; er
 }
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') {
     return NextResponse.json({ status: 'error', message: 'Unauthorized.' }, { status: 401 });
   }

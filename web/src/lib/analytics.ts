@@ -179,11 +179,15 @@ export async function getAdminAnalytics(): Promise<Analytics> {
           (select count(*) from orders) as orders,
           (select coalesce(sum(oi.price * oi.quantity),0) from order_items oi join orders o on o.id=oi.order_id where o.status <> 'cancelled') as revenue,
           (select coalesce(avg(o.total_amount),0) from orders o where o.status <> 'cancelled') as aov`,
-    sql`select date_trunc('week', u.created_at) as week,
-              count(*) filter (where u.role='customer') as customers,
-              count(*) filter (where u.role='artisan') as artisans
-        from users u
-        where u.created_at >= now() - (${WEEKS} || ' weeks')::interval
+    sql`select date_trunc('week', account.created_at) as week,
+              count(*) filter (where account.account_type='customer') as customers,
+              count(*) filter (where account.account_type='artisan') as artisans
+        from (
+          select created_at, 'customer'::text as account_type from users where role='customer'
+          union all
+          select created_at, 'artisan'::text as account_type from artisans
+        ) account
+        where account.created_at >= now() - (${WEEKS} || ' weeks')::interval
         group by 1 order by 1`,
     sql`select coalesce(nullif(trim(min(location)),''),'Unknown') as location, count(*) as count
         from artisans group by lower(coalesce(nullif(trim(location),''),'Unknown')) order by count desc limit 8`,

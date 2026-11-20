@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { artisanAnalytics } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanAnalyticsPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/analytics');
+  await requireVerifiedArtisan(session.id);
 
   const stats = await artisanAnalytics(session.id);
   return (

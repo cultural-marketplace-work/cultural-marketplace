@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listNotifications } from '@/lib/db';
 import NotificationsClient from './NotificationsClient';
 
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanNotificationsPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/notifications');
+  await requireVerifiedArtisan(session.id);
 
   const notifications = await listNotifications(session.id, 'artisan');
   return (

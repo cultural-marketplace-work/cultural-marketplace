@@ -63,6 +63,7 @@ export interface NavSection {
     href: string;
     label: string;
     icon?: NavIconName;
+    disabled?: boolean;
   }>;
 }
 
@@ -197,33 +198,41 @@ export default function PortalSidebar({
               {section.items.map((item) => {
                 const active = isActive(pathname, item.href);
                 const Icon = item.icon ? NAV_ICONS[item.icon] : null;
+                const itemClass = `flex items-center gap-2.5 rounded-xl px-3 py-2 ${
+                  active
+                    ? 'bg-[#8B0000] font-semibold text-white shadow-sm'
+                    : item.disabled
+                      ? 'cursor-not-allowed font-medium text-[#8A8179] opacity-60'
+                      : 'font-medium text-[#3F352E] transition-all hover:bg-[#EAD9C3] hover:text-[#211B17]'
+                }`;
+                const iconClass = `shrink-0 ${
+                  active ? 'text-white' : item.disabled ? 'text-[#9C938B]' : 'text-[#75695F]'
+                }`;
 
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    prefetch={true}
-                    aria-current={active ? 'page' : undefined}
-                    className={`flex items-center gap-2.5 rounded-xl px-3 py-2 transition-all ${
-                      active
-                        ? 'bg-[#8B0000] font-semibold text-white shadow-sm'
-                        : 'font-medium text-[#3F352E] hover:bg-[#EAD9C3] hover:text-[#211B17]'
-                    }`}
-                    onClick={() => setOpen(false)}
-                  >
-                    {Icon && (
-                      <Icon
-                        size={17}
-                        strokeWidth={1.8}
-                        aria-hidden="true"
-                        className={`shrink-0 ${
-                          active ? 'text-white' : 'text-[#75695F]'
-                        }`}
-                      />
-                    )}
-
-                    <span className="truncate">{item.label}</span>
-                  </Link>
+                  item.disabled ? (
+                    <span
+                      key={item.href}
+                      className={itemClass}
+                      aria-disabled="true"
+                      title="Available after artisan verification"
+                    >
+                      {Icon && <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />}
+                      <span className="truncate">{item.label}</span>
+                    </span>
+                  ) : (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      prefetch={true}
+                      aria-current={active ? 'page' : undefined}
+                      className={itemClass}
+                      onClick={() => setOpen(false)}
+                    >
+                      {Icon && <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />}
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  )
                 );
               })}
             </div>

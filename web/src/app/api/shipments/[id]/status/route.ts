@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { updateShipmentStatus, getShipmentById } from '@/lib/shipments';
 import { pushNotification } from '@/lib/db';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import type { ShipmentStatus } from '@/lib/types';
 
 // Status transitions: artisan advances their own parcels; admin may also cancel
@@ -20,6 +21,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const session = await getSession();
   if (!session || (session.role !== 'artisan' && session.role !== 'admin')) {
     return NextResponse.json({ status: 'error', message: 'Unauthorized' }, { status: 401 });
+  }
+  if (session.role === 'artisan' && !await getVerifiedArtisanSession()) {
+    return NextResponse.json({ status: 'error', message: 'Artisan verification is required to manage shipments.' }, { status: 403 });
   }
   const { id } = await params;
   const shipmentId = Number(id);

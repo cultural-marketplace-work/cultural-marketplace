@@ -23,6 +23,7 @@ export default async function AdminArtisansPage() {
         craft_type: a.craft_type,
         location: a.location,
         verification_status: a.verification_status,
+        application_submitted: a.application_submitted !== false,
         productCount: a.productCount,
       }))} />
     </div>

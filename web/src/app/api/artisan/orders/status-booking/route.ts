@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { updateBookingStatus, pushNotification, getOrder, getOrderItem } from '@/lib/db';
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getVerifiedArtisanSession();
   if (!session || session.role !== 'artisan') return NextResponse.json({ status: 'error' }, { status: 401 });
 
   const { order_item_id, status } = (await req.json()) as { order_item_id?: number; status?: string };

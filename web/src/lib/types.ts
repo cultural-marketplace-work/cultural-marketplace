@@ -151,6 +151,8 @@ export interface Artisan {
   bio: string | null;
   profile_picture: string | null;
   verification_status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  application_submitted?: boolean;
+  account_deleted_at?: string | null;
   phone: string | null;
   // verification artifacts (face/OCR feature)
   selfie_path?: string | null;
@@ -224,7 +226,8 @@ export interface CartItem {
 
 export interface Notification {
   id: number;
-  user_id: number;
+  user_id: number | null;
+  artisan_id?: number | null;
   user_role: string;
   type: string;
   message: string;

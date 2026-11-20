@@ -3,7 +3,7 @@
 // pages (/customer/browse, /cart, /checkout handled in-page) stay open.
 
 import { NextResponse, type NextRequest } from 'next/server';
-import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/sessionToken';
 
 const GUARDS: Array<{ prefixes: string[]; roles: Array<'customer' | 'artisan' | 'admin'> }> = [
   { prefixes: ['/customer/account'], roles: ['customer'] },

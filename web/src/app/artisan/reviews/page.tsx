@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { listArtisanOrders } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function ArtisanReviewsPage() {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/reviews');
+  await requireVerifiedArtisan(session.id);
 
   const orders = await listArtisanOrders(session.id);
   const reviews = orders.filter((o) => o.review_rating != null);

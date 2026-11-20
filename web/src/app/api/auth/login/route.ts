@@ -13,13 +13,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'error', message: "That email or password isn't right. Please double-check and try again." }, { status: 401 });
     }
     await createSession({ id: user.id, name: user.name, role: user.role, email: user.email, profile_picture: user.profile_picture });
-    await logActivity({
-      userId: user.id, role: user.role, userName: user.name, action: 'login',
-      description: `${user.role === 'admin' ? 'Administrator' : user.role === 'artisan' ? 'Artisan' : 'User'} logged in: ${user.name} (${user.email})`,
-    });
+    try {
+      await logActivity({
+        userId: user.id, role: user.role, userName: user.name, action: 'login',
+        description: `${user.role === 'admin' ? 'Administrator' : user.role === 'artisan' ? 'Artisan' : 'User'} logged in: ${user.name} (${user.email})`,
+      });
+    } catch (error) {
+      console.error('Failed to record login activity:', error);
+    }
     const home = user.role === 'admin' ? '/admin/dashboard' : user.role === 'artisan' ? '/artisan/dashboard' : '/customer/account/dashboard';
     return NextResponse.json({ status: 'success', redirect: home });
   } catch (e) {
+    console.error('Login request failed:', e);
     return NextResponse.json({ status: 'error', message: 'Login failed.' }, { status: 500 });
   }
 }
