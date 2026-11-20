@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { takePendingRegistration, deletePendingRegistration, createCustomer, logActivity, findUserByEmail, hashPassword } from '@/lib/db';
+import { takePendingRegistration, deletePendingRegistration, createCustomer, logActivity, isEmailRegistered, hashPassword } from '@/lib/db';
 import { createSession } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
-    const { email, otp } = (await req.json()) as { email?: string; otp?: string };
+    const { email: rawEmail, otp } = (await req.json()) as { email?: string; otp?: string };
+    const email = (rawEmail ?? '').trim().toLowerCase();
     if (!email || !otp) {
       return NextResponse.json({ status: 'error', message: 'Missing email or OTP.' }, { status: 400 });
     }
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
     if (pending.expires < Date.now()) {
       return NextResponse.json({ status: 'error', message: 'OTP has expired. Please click Resend OTP to get a new one.' }, { status: 400 });
     }
-    if (await findUserByEmail(email)) {
+    if (await isEmailRegistered(email)) {
       await deletePendingRegistration(email);
       return NextResponse.json({ status: 'error', message: 'This email was just registered. Please log in instead.' }, { status: 409 });
     }
@@ -28,7 +29,11 @@ export async function POST(req: Request) {
     await createSession({ id, name: pending.name, role: 'customer', email, profile_picture: null });
     await logActivity({ userId: id, role: 'customer', userName: pending.name, action: 'registration', description: `New customer registered: ${pending.name} (${email})` });
     return NextResponse.json({ status: 'success', redirect: '/customer/account/dashboard' });
-  } catch {
+  } catch (error) {
+    console.error('Customer email verification failed:', error);
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      return NextResponse.json({ status: 'error', message: 'This email is already registered. Please sign in instead.' }, { status: 409 });
+    }
     return NextResponse.json({ status: 'error', message: 'Verification failed. Please try again.' }, { status: 500 });
   }
 }

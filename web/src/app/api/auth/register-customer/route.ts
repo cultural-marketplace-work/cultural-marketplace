@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { deletePendingRegistration, findUserByEmail, putPendingRegistration, takePendingRegistration } from '@/lib/db';
+import { deletePendingRegistration, isEmailRegistered, putPendingRegistration, takePendingRegistration } from '@/lib/db';
 import { sendOtpEmail } from '@/lib/email';
 
 export async function POST(req: Request) {
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     };
     const firstName = (body.first_name ?? '').trim();
     const lastName = (body.last_name ?? '').trim();
-    const email = (body.email ?? '').trim();
+    const email = (body.email ?? '').trim().toLowerCase();
     const phone = (body.phone ?? '').trim();
     const password = body.password ?? '';
 
@@ -19,6 +19,9 @@ export async function POST(req: Request) {
     }
 
     if (body.resend) {
+      if (await isEmailRegistered(email)) {
+        return NextResponse.json({ status: 'error', message: 'This email is already registered. Please sign in instead.' }, { status: 409 });
+      }
       const pending = await takePendingRegistration(email);
       if (!pending) {
         return NextResponse.json({ status: 'error', message: 'Your registration expired. Please register again.' }, { status: 404 });
@@ -61,7 +64,7 @@ export async function POST(req: Request) {
     if (!body.terms) {
       return NextResponse.json({ status: 'error', message: 'Please agree to the Terms & Conditions and Privacy Policy.' }, { status: 400 });
     }
-    if (await findUserByEmail(email)) {
+    if (await isEmailRegistered(email)) {
       return NextResponse.json({ status: 'error', message: 'This email is already registered. Please provide a different valid email address.' }, { status: 409 });
     }
 
