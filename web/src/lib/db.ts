@@ -1,4 +1,4 @@
-// Dual data layer:
+﻿// Dual data layer:
 //  - DATABASE_URL set  -> real Postgres (Supabase) via `postgres` driver
 //  - otherwise         -> in-memory demo store seeded from the legacy dump
 // Both backends implement the same call surface, so route handlers are
@@ -722,26 +722,150 @@ export async function listCustomerOrders(customerId: number): Promise<Order[]> {
   return store!.orders.filter((o) => o.customer_id === customerId).sort((a, b) => b.id - a.id);
 }
 
-export async function listCustomerOrdersWithItems(customerId: number): Promise<Array<{ order: Order; items: OrderItem[] }>> {
+export type OrderItemWithImage = OrderItem & {
+  image_path: string | null;
+};
+export async function listCustomerOrdersWithItems(
+  customerId: number
+): Promise<Array<{ order: Order; items: OrderItemWithImage[] }>> {
   if (usingPostgres) {
     const rows = await sql`
       select o.*,
-        coalesce(jsonb_agg(to_jsonb(oi.*) order by oi.id) filter (where oi.id is not null), '[]'::jsonb) as items
+        coalesce(
+          jsonb_agg(
+            to_jsonb(oi) || jsonb_build_object('image_path', p.image_path)
+            order by oi.id
+          ) filter (where oi.id is not null),
+          '[]'::jsonb
+        ) as items
       from orders o
       left join order_items oi on oi.order_id = o.id
+      left join products p on p.id = oi.product_id
       where o.customer_id = ${customerId}
       group by o.id
-      order by o.created_at desc`;
+      order by o.created_at desc
+    `;
+
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
       order: mapOrder(r),
-      items: ((r.items as unknown as Record<string, unknown>[]) || []).map(mapOrderItem),
+      items: ((r.items as Record<string, unknown>[]) || []).map((item) => ({
+        ...mapOrderItem(item),
+        image_path: (item.image_path as string) ?? null,
+      })),
     }));
   }
-  const orders = store!.orders.filter((o) => o.customer_id === customerId).sort((a, b) => b.id - a.id);
+
+  const orders = store!.orders
+    .filter((o) => o.customer_id === customerId)
+    .sort((a, b) => b.id - a.id);
+
   return orders.map((o) => ({
     order: { ...o },
-    items: store!.order_items.filter((oi) => oi.order_id === o.id).map((oi) => ({ ...oi })),
+    items: store!.order_items
+      .filter((oi) => oi.order_id === o.id)
+      .map((oi) => {
+        const product = store!.products.find(
+          (p) => p.id === oi.product_id
+        );
+
+        return {
+          ...oi,
+          image_path: product?.image_path ?? null,
+        };
+      }),
   }));
+}
+
+export interface CustomerOrderItemRow {
+  id: number;
+  order_id: number;
+  product_id: number;
+  artisan_id: number;
+  product_name: string;
+  artisan_name: string;
+  image_path: string | null;
+  purchase_type: string;
+  quantity: number;
+  price: number;
+  selected_variant: string | null;
+  status: string;          // order_items.status (artisan-side progress)
+  order_status: string;    // orders.status
+  payment_method: string;
+  courier_name: string | null;
+  tracking_number: string | null;
+  review_rating: number | null;
+  created_at: string;
+}
+
+/** One row per purchased item, newest first, with product photo + artisan name.
+ *  Used by the customer dashboard. Single query (no N+1). */
+export async function listCustomerOrderItems(customerId: number, limit = 30): Promise<CustomerOrderItemRow[]> {
+  if (usingPostgres) {
+    const rows = await sql`
+      select oi.id, oi.order_id, oi.product_id, oi.artisan_id, oi.product_name,
+             oi.purchase_type, oi.quantity, oi.price, oi.selected_variant, oi.status,
+             oi.courier_name, oi.tracking_number, oi.review_rating,
+             o.status as order_status, o.payment_method, o.created_at,
+             a.name as artisan_name, p.image_path
+      from order_items oi
+      join orders o on o.id = oi.order_id
+      left join artisans a on a.id = oi.artisan_id
+      left join products p on p.id = oi.product_id
+      where o.customer_id = ${customerId}
+      order by o.created_at desc, oi.id desc
+      limit ${limit}`;
+    return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+      id: num(r.id),
+      order_id: num(r.order_id),
+      product_id: num(r.product_id),
+      artisan_id: num(r.artisan_id),
+      product_name: String(r.product_name),
+      artisan_name: String(r.artisan_name ?? 'Artisan'),
+      image_path: (r.image_path as string) ?? null,
+      purchase_type: String(r.purchase_type ?? 'product'),
+      quantity: num(r.quantity),
+      price: num(r.price),
+      selected_variant: (r.selected_variant as string) ?? null,
+      status: String(r.status ?? 'pending'),
+      order_status: String(r.order_status),
+      payment_method: String(r.payment_method),
+      courier_name: (r.courier_name as string) ?? null,
+      tracking_number: (r.tracking_number as string) ?? null,
+      review_rating: r.review_rating == null ? null : num(r.review_rating),
+      created_at: tsString(r.created_at) ?? new Date().toISOString(),
+    }));
+  }
+  const orders = store!.orders.filter((o) => o.customer_id === customerId);
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  return store!.order_items
+    .filter((oi) => byId.has(oi.order_id))
+    .map((oi) => {
+      const o = byId.get(oi.order_id)!;
+      const a = store!.artisans.find((x) => x.id === oi.artisan_id);
+      const p = store!.products.find((x) => x.id === oi.product_id);
+      return {
+        id: oi.id,
+        order_id: oi.order_id,
+        product_id: oi.product_id,
+        artisan_id: oi.artisan_id,
+        product_name: oi.product_name,
+        artisan_name: a?.name ?? 'Artisan',
+        image_path: p?.image_path ?? null,
+        purchase_type: oi.purchase_type,
+        quantity: oi.quantity,
+        price: num(oi.price),
+        selected_variant: oi.selected_variant ?? null,
+        status: oi.status ?? 'pending',
+        order_status: o.status,
+        payment_method: o.payment_method,
+        courier_name: oi.courier_name ?? null,
+        tracking_number: oi.tracking_number ?? null,
+        review_rating: oi.review_rating ?? null,
+        created_at: o.created_at,
+      };
+    })
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)
+    .slice(0, limit);
 }
 
 export interface CustomerBooking {
@@ -1241,6 +1365,20 @@ export async function listMessages(conversationId: number): Promise<ChatMessage[
     }));
   }
   return store!.chat_messages.filter((m) => m.conversation_id === conversationId).sort((a, b) => a.id - b.id);
+}
+
+/** Unread incoming chat messages for a customer (sent by artisans, read_at still null). */
+export async function getUnreadMessageCount(customerId: number): Promise<number> {
+  if (usingPostgres) {
+    const rows = await sql`
+      select count(*)::int as n
+      from chat_messages m
+      join chat_conversations c on c.id = m.conversation_id
+      where c.customer_id = ${customerId} and m.sender_role = 'artisan' and m.read_at is null`;
+    return num((rows[0] as Record<string, unknown>)?.n ?? 0);
+  }
+  const mine = new Set(store!.chat_conversations.filter((c) => c.customer_id === customerId).map((c) => c.id));
+  return store!.chat_messages.filter((m) => mine.has(m.conversation_id) && m.sender_role === 'artisan' && !m.read_at).length;
 }
 
 export async function sendMessage(conversationId: number, senderRole: 'customer' | 'artisan', message: string): Promise<void> {

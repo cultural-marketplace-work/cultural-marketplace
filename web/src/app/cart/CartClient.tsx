@@ -25,9 +25,7 @@ let lastRemoved: CartRow | null = null;
 export default function CartClient({ initialItems }: { initialItems: CartRow[] }) {
   const router = useRouter();
   const [items, setItems] = useState<CartRow[]>(initialItems);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(
-    () => new Set(initialItems.map((i) => i.id))
-  );
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -64,12 +62,12 @@ export default function CartClient({ initialItems }: { initialItems: CartRow[] }
           });
           setItems(mapped);
           setSelectedIds((prev) => {
-            const next = new Set<number>();
-            mapped.forEach((m) => {
-              if (prev.has(m.id) || prev.size === 0) next.add(m.id);
-            });
-            return next;
-          });
+  const next = new Set<number>();
+  mapped.forEach((m) => {
+    if (prev.has(m.id)) next.add(m.id);
+  });
+  return next;
+});
         }
       } catch {
         // Fallback silently to initialItems
