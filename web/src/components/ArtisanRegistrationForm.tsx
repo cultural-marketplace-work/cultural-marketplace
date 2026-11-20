@@ -396,27 +396,40 @@ export default function ArtisanRegistrationForm({ applicant }: {
   // 3. Fast Automatic & Editable OCR Handler
   async function handleIdUpload(rawFile: File, side: 'front' | 'back') {
     setError('');
-    setOcrBusy(true);
-    setOcrHint('⚡ Compressing image for fast reading…');
+    const shouldReadOcr = side === 'front';
+    if (shouldReadOcr) {
+      setOcrBusy(true);
+      setOcrHint('⚡ Compressing image for fast reading…');
+    } else {
+      setOcrHint('Compressing the back of your ID…');
+    }
+    let workerPromise: Promise<Tesseract.Worker> | null = null;
+    let imageReady = false;
 
     try {
-      // Fast canvas downscale: 6MB -> ~150KB in 30ms
-      const compressed = await compressImage(rawFile, 1200, 1200, 0.8);
+      const compressed = await compressImage(rawFile, 1000, 1000, 0.75);
+      if (compressed.size > 2 * 1024 * 1024) {
+        throw new Error('The image is still too large after compression.');
+      }
       const dataUrl = await fileToDataUrl(compressed);
 
       if (side === 'front') {
         setIdFront(compressed);
         setIdFrontPreview(dataUrl);
+        imageReady = true;
         if (selfie) {
           void triggerFaceMatch(selfie, compressed);
         }
       } else {
         setIdBack(compressed);
         setIdBackPreview(dataUrl);
+        imageReady = true;
+        setOcrHint('Back of ID attached. Enter any details that were not detected from the front manually.');
+        return;
       }
 
       setOcrHint('Preparing on-device OCR…');
-      let workerPromise = ocrWorkerRef.current;
+      workerPromise = ocrWorkerRef.current;
       if (!workerPromise) {
         workerPromise = import('tesseract.js').then(({ createWorker }) =>
           createWorker('eng', undefined, {
@@ -469,10 +482,23 @@ export default function ArtisanRegistrationForm({ applicant }: {
         ? `Auto-filled ${itemsFound.join(', ')}. Review and edit the details before continuing.`
         : 'No applicant details were detected. You can enter them manually.');
     } catch (error) {
-      console.error('On-device ID OCR failed:', error);
-      setOcrHint('On-device OCR could not read this image. Please check the photo or enter the details manually.');
+      console.error(`ID ${side} image processing failed:`, error);
+      if (!imageReady) {
+        setError('This photo could not be prepared on this device. Try a smaller image or take a new picture.');
+      }
+      setOcrHint(imageReady
+        ? 'On-device OCR could not read this image. Please check the photo or enter the details manually.'
+        : 'Could not prepare this image. Try a smaller photo or take a new picture.');
     } finally {
-      setOcrBusy(false);
+      if (shouldReadOcr) {
+        setOcrBusy(false);
+        if (workerPromise && ocrWorkerRef.current === workerPromise) {
+          ocrWorkerRef.current = null;
+          void workerPromise
+            .then((worker) => worker.terminate())
+            .catch((error) => console.error('Could not stop the local OCR worker:', error));
+        }
+      }
     }
   }
 
