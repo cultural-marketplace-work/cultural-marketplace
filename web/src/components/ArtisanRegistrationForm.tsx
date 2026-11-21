@@ -15,6 +15,7 @@ import {
 } from '@/lib/livenessChallenges';
 import ArtisanHeader from '@/components/ArtisanHeader';
 import WeaveDivider from '@/components/WeaveDivider';
+import { LogoLoading, LogoLoadingOverlay } from '@/components/LogoLoading';
 import type Tesseract from 'tesseract.js';
 import type { FaceLandmarker } from '@mediapipe/tasks-vision';
 import {
@@ -870,6 +871,27 @@ export default function ArtisanRegistrationForm({ applicant }: {
 
   async function finalSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!proofCraft) {
+      setError('Upload a production photo or video for Proof of Craft Production.');
+      return;
+    }
+    if (!sample1 || !sample2) {
+      setError('Upload both required distinct product samples.');
+      return;
+    }
+    if (!proofCraft.type.startsWith('image/') && !proofCraft.type.startsWith('video/')) {
+      setError('Proof of Craft must be a photo or video.');
+      return;
+    }
+    if (!sample1.type.startsWith('image/') || !sample2.type.startsWith('image/')) {
+      setError('Both product samples must be photos.');
+      return;
+    }
+    const oversized = [proofCraft, sample1, sample2].find((file) => file.size > 8 * 1024 * 1024);
+    if (oversized) {
+      setError(`${oversized.name} is larger than 8 MB. Please choose a smaller file.`);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -1004,6 +1026,17 @@ export default function ArtisanRegistrationForm({ applicant }: {
   const compactOutlineButton = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-1 text-[10px] font-medium text-stone-600 transition hover:border-ochre-500 hover:bg-ochre-50 disabled:cursor-not-allowed disabled:opacity-50';
   const compactWidePrimaryButton = `${compactPrimaryButton} h-7 w-full`;
   const compactWideOutlineButton = `${compactOutlineButton} h-7 w-full`;
+  const loadingMessage = step === 'face'
+    ? ''
+    : busy
+    ? step === 'credentials'
+      ? 'Submitting your artisan verification…'
+      : step === 'details'
+        ? 'Validating applicant details…'
+        : 'Verifying your account…'
+    : ocrBusy
+      ? 'Reading ID details…'
+      : '';
 
       return (
     <main className={step === 'account' || step === 'otp' || compactVerification
@@ -1589,7 +1622,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
             {/* OCR Live Status */}
             {ocrBusy && (
               <div className={`flex items-center gap-2 rounded-lg border border-brand-200 bg-white text-brand-700 ${compactIdVerification ? 'p-1.5 text-[7px]' : 'p-2.5 text-xs'}`}>
-                <span className={`animate-spin ${compactIdVerification ? 'text-[9px]' : 'text-sm'}`}>⏳</span>
+                <LogoLoading compact />
                 <span>{ocrHint || 'Reading ID details on this device…'}</span>
               </div>
             )}
@@ -1662,14 +1695,23 @@ export default function ArtisanRegistrationForm({ applicant }: {
               </div>
 
               <div>
-                <label className={labelClass} htmlFor="dob">Date of Birth</label>
+                <label className={labelClass} htmlFor="dob">Date of Birth (YYYY-MM-DD)</label>
                 <input
                   id="dob"
                   type="date"
+                  autoComplete="bday"
+                  min="1900-01-01"
+                  max={new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'Asia/Manila',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                  }).format(new Date())}
                   className={inputClass}
                   value={form.dob}
                   onChange={(e) => set('dob', e.target.value)}
                 />
+                <p className="mt-1 text-[11px] text-stone-500">Choose a date (YYYY-MM-DD).</p>
               </div>
             </div>
 
@@ -1819,7 +1861,6 @@ export default function ArtisanRegistrationForm({ applicant }: {
 
   {faceResult === 'matching' && (
     <div className="flex items-center gap-2.5 text-primary-700 bg-primary-50 border border-primary-200 p-3 rounded-xl">
-      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-300 border-t-primary-600 shrink-0" />
       <span>{faceMessage || 'Matching with ID photo…'}</span>
     </div>
   )}
@@ -1925,7 +1966,6 @@ export default function ArtisanRegistrationForm({ applicant }: {
                     {/* Camera starting / loading indicator */}
                     {!camReady && (
                       <div className="absolute inset-0 bg-stone-900/90 flex flex-col items-center justify-center gap-2 text-white">
-                        <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                         <p className="text-xs font-medium">Starting camera feed…</p>
                       </div>
                     )}
@@ -2167,9 +2207,9 @@ export default function ArtisanRegistrationForm({ applicant }: {
 
             <div className="mt-3 grid grid-cols-3 gap-3">
               {([
-  ['proof', proofRef, proofCraft, setProofCraft, proofPreview, setProofPreview, 'Craft', 'Proof of Craft'],
-  ['sample1', s1Ref, sample1, setSample1, s1Preview, setS1Preview, 'Sample', 'Product Sample 1'],
-  ['sample2', s2Ref, sample2, setSample2, s2Preview, setS2Preview, 'Sample', 'Product Sample 2'],
+  ['proof', proofRef, proofCraft, setProofCraft, proofPreview, setProofPreview, 'Craft', 'Proof of Craft *'],
+  ['sample1', s1Ref, sample1, setSample1, s1Preview, setS1Preview, 'Sample', 'Product Sample 1 *'],
+  ['sample2', s2Ref, sample2, setSample2, s2Preview, setS2Preview, 'Sample', 'Product Sample 2 *'],
 ] as const).map(([side, ref, file, setFile, preview, setPreview, icon, label]) => (
                 <div key={side} className="rounded-xl border-2 border-dashed border-stone-200 p-2 text-center">
                   {preview || (side === 'proof' && file) ? (
@@ -2206,7 +2246,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
                   <input
                     ref={ref}
                     type="file"
-                    accept={side === 'proof' ? 'image/*,video/mp4,video/webm' : 'image/*'}
+                    accept={side === 'proof' ? 'image/*,video/*' : 'image/*'}
                     capture="environment"
                     className="hidden"
                     onChange={async (e) => {
@@ -2296,6 +2336,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
           </section>
         </div>
       )}
+      {loadingMessage && <LogoLoadingOverlay message={loadingMessage} />}
 </main>
   );
 }
