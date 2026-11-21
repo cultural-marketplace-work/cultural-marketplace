@@ -161,7 +161,7 @@ export async function POST(req: Request) {
     const selfie = readFile(form.get('selfie'));
     const proofUpload = readFile(form.get('proof_of_craft'));
     const proofCraft = proofUpload &&
-      (proofUpload.type.startsWith('image/') || ['video/mp4', 'video/webm'].includes(proofUpload.type))
+      (proofUpload.type.startsWith('image/') || proofUpload.type.startsWith('video/'))
       ? proofUpload
       : null;
     const sample1 = readFile(form.get('product_sample_1'));
@@ -170,6 +170,15 @@ export async function POST(req: Request) {
     const indigenousAffiliation = String(form.get('indigenous_affiliation') ?? d.indigenous_affiliation ?? '').trim();
     const craftType = String(form.get('craft_type') ?? d.craft_type ?? '').trim();
     const businessName = String(form.get('business_name') ?? d.business_name ?? '').trim();
+    if (!proofCraft) {
+      return NextResponse.json({ status: 'error', message: 'Upload a production photo or video for Proof of Craft Production.' }, { status: 400 });
+    }
+    if (!sample1 || !sample2) {
+      return NextResponse.json({ status: 'error', message: 'Upload both required product samples.' }, { status: 400 });
+    }
+    if (!sample1.type.startsWith('image/') || !sample2.type.startsWith('image/')) {
+      return NextResponse.json({ status: 'error', message: 'Both product samples must be photos.' }, { status: 400 });
+    }
     if (indigenousAffiliation.length > 200 || craftType.length > 100 || businessName.length > 100) {
       return NextResponse.json({ status: 'error', message: 'Affiliation or craft details exceed the allowed length.' }, { status: 400 });
     }
@@ -347,6 +356,18 @@ export async function POST(req: Request) {
       uploadOne(sample1, s1Buf, 'product-sample-1'),
       uploadOne(sample2, s2Buf, 'product-sample-2'),
     ]);
+    if (!proofPath) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Proof of Craft Production could not be uploaded to Supabase Storage. Please submit again.',
+      }, { status: 500 });
+    }
+    if (!s1Path || !s2Path) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'The product sample photos could not be uploaded to Supabase Storage. Please submit again.',
+      }, { status: 500 });
+    }
 
     const detectedTypes = [...new Set(
       [preOcr.front?.detected_id_type, preOcr.back?.detected_id_type].filter((value): value is string => Boolean(value)),
@@ -369,7 +390,10 @@ export async function POST(req: Request) {
       sampleHashes[0] && sampleHashes[1] && sampleHashes[0] !== sampleHashes[1],
     ) ? 'pass' as const : 'fail' as const;
     const proofOfCraftStatus = Boolean(
-      proofPath && proofCraft?.type.startsWith('image/') && proofReadable,
+      proofPath && proofCraft && (
+        (proofCraft.type.startsWith('image/') && proofReadable) ||
+        (proofCraft.type.startsWith('video/') && Boolean(proofBuf && proofBuf.byteLength > 0))
+      ),
     ) ? 'pass' as const : 'review' as const;
     const extractedDob = preOcr.front?.dob ?? preOcr.back?.dob ?? null;
     const selectedIdNumber = preOcr.front?.id_number ?? preOcr.back?.id_number ?? d.id_number ?? '';

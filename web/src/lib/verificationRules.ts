@@ -36,9 +36,29 @@ export interface VerificationEvidence {
 }
 
 function parseDateOnly(value?: string | null): Date | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value ? null : parsed;
+  if (!value) return null;
+  const text = value.trim();
+
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const normalized = `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const parsed = new Date(`${normalized}T00:00:00.000Z`);
+    return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized ? null : parsed;
+  }
+
+  const numeric = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (numeric) {
+    const first = Number(numeric[1]);
+    const second = Number(numeric[2]);
+    const year = Number(numeric[3]);
+    const day = first > 12 ? first : second > 12 ? second : first;
+    const month = first > 12 ? second : second > 12 ? first : second;
+    const normalized = `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+    const parsed = new Date(`${normalized}T00:00:00.000Z`);
+    return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized ? null : parsed;
+  }
+
+  return null;
 }
 
 function todayInManila(): Date {
@@ -95,7 +115,9 @@ export function evaluateVerificationRules(evidence: VerificationEvidence): RuleR
   const selectedIdType = evidence.idType?.trim() ?? '';
   const acceptedIdType = VALID_ARTISAN_ID_TYPES.some((type) => type === selectedIdType);
   const detectedIdType = evidence.detectedIdType?.trim() ?? '';
-  const dob = evidence.dobFromOcr ? parseDateOnly(extracted.dob) : null;
+  const dob = evidence.dobFromOcr
+    ? parseDateOnly(extracted.dob) ?? parseDateOnly(evidence.dob)
+    : parseDateOnly(evidence.dob) ?? parseDateOnly(extracted.dob);
   const age = dob ? ageOnDate(dob, todayInManila()) : null;
   const missingRequiredInformation = [
     ['name', evidence.accountName?.trim() || extracted.name],
@@ -121,11 +143,15 @@ export function evaluateVerificationRules(evidence: VerificationEvidence): RuleR
     },
     {
       id: '2',
-      label: 'ID type matching',
-      status: 'pass',
-      detail: detectedIdType
-        ? `Automatically passed; OCR identifies ${detectedIdType}`
-        : 'Automatically passed; OCR identification is not required',
+      label: 'ID Format Validation',
+      status: detectedIdType
+        ? detectedIdType === selectedIdType ? 'pass' : 'review'
+        : 'review',
+      detail: detectedIdType === selectedIdType
+        ? 'Checks expected document keywords, fields, and format characteristics based on the selected ID type. Expected document characteristics are detected.'
+        : detectedIdType
+          ? `Checks expected document keywords, fields, and format characteristics based on the selected ID type. Detected characteristics (${detectedIdType}) do not match the selected ID type (${selectedIdType}).`
+          : 'Checks expected document keywords, fields, and format characteristics based on the selected ID type. Expected document characteristics could not be confirmed.',
     },
     {
       id: '3',
@@ -195,7 +221,7 @@ export function evaluateVerificationRules(evidence: VerificationEvidence): RuleR
       id: '9',
       label: 'Age requirement',
       status: age == null ? 'review' : age >= 18 ? 'pass' : 'fail',
-      detail: age == null ? 'OCR birthdate is missing or invalid' :
+      detail: age == null ? 'Applicant birthdate is missing or invalid' :
         age >= 18 ? `${age} years old` : 'Applicant is under 18',
     },
     {
@@ -208,19 +234,19 @@ export function evaluateVerificationRules(evidence: VerificationEvidence): RuleR
     },
     {
       id: '11',
-      label: 'Proof of craft',
+      label: 'Proof of Craft Production',
       status: evidence.proofOfCraftStatus === 'pass' ? 'pass' : 'review',
       detail: evidence.proofOfCraftStatus === 'pass'
-        ? 'Craft evidence uploaded and readable'
-        : 'Craft evidence is missing or needs a manual readability check',
+        ? 'Checks whether the required production photo or video has been uploaded and can be opened. The required production photo or video is uploaded and accessible.'
+        : 'Checks whether the required production photo or video has been uploaded and can be opened. The required production photo or video is missing or could not be opened.',
     },
     {
       id: '12',
-      label: 'Distinct product samples',
+      label: 'Product Samples',
       status: evidence.productSamplesStatus === 'pass' ? 'pass' : 'fail',
       detail: evidence.productSamplesStatus === 'pass'
-        ? 'At least two readable, non-identical product samples uploaded'
-        : 'Two distinct readable product samples were not provided',
+        ? 'Counts the distinct product samples uploaded by the applicant. At least two distinct product samples are submitted.'
+        : 'Counts the distinct product samples uploaded by the applicant. At least two distinct product samples were not submitted.',
     },
     {
       id: '13',

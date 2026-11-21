@@ -437,6 +437,104 @@ export async function updateArtisan(id: number, p: { name?: string; email?: stri
   invalidate('artisans*');
 }
 
+export interface DeleteApplicationResult {
+  deleted: boolean;
+  warning?: string;
+}
+
+export async function deleteArtisanApplication(id: number): Promise<DeleteApplicationResult> {
+  syncFromCore();
+  let mediaPaths: string[] = [];
+  if (usingPg) {
+    const deleted = await sql.begin(async (tx) => {
+      const rows = await tx`select * from artisans where id = ${id} and account_deleted_at is null for update`;
+      if (!rows.length) return false;
+      const artisan = rows[0] as Record<string, unknown>;
+      const email = String(artisan.email);
+      mediaPaths = [
+        ...collectStoredPaths(artisan.id_document_path),
+        ...collectStoredPaths(artisan.id_document_back_path),
+        ...collectStoredPaths(artisan.affiliation_document_path),
+        ...collectStoredPaths(artisan.proof_of_craft_path),
+        ...collectStoredPaths(artisan.product_sample_1_path),
+        ...collectStoredPaths(artisan.product_sample_2_path),
+        ...collectStoredPaths(artisan.selfie_path),
+      ];
+
+      await tx`delete from artisan_verification_results where artisan_id = ${id}`;
+      await tx`delete from face_embeddings where artisan_id = ${id}`;
+      await tx`delete from face_verification_logs where artisan_id = ${id} or lower(email) = ${email.toLowerCase()}`;
+      await tx`delete from pending_registrations where lower(email) = ${email.toLowerCase()}`;
+      await tx`
+        update artisans set
+          id_type = null,
+          id_number = null,
+          dob = null,
+          id_expiry_date = null,
+          id_expiry_checked = false,
+          indigenous_affiliation = null,
+          affiliation_document_path = null,
+          id_document_path = null,
+          id_document_back_path = null,
+          proof_of_craft_path = null,
+          product_sample_1_path = null,
+          product_sample_2_path = null,
+          selfie_path = null,
+          verification_status = 'pending',
+          application_submitted = false
+        where id = ${id}`;
+      return true;
+    });
+    if (!deleted) return { deleted: false };
+    const warning = await cleanupStoredFiles(mediaPaths);
+    invalidate('artisans*');
+    invalidate('admin:stats');
+    return { deleted: true, ...(warning ? { warning } : {}) };
+  }
+
+  const artisan = store().artisans.find((item) => item.id === id && !item.account_deleted_at);
+  if (!artisan) return { deleted: false };
+  mediaPaths = [
+    ...collectStoredPaths(artisan.id_document_path),
+    ...collectStoredPaths(artisan.id_document_back_path),
+    ...collectStoredPaths(artisan.affiliation_document_path),
+    ...collectStoredPaths(artisan.proof_of_craft_path),
+    ...collectStoredPaths(artisan.product_sample_1_path),
+    ...collectStoredPaths(artisan.product_sample_2_path),
+    ...collectStoredPaths(artisan.selfie_path),
+  ];
+  Object.assign(artisan, {
+    id_type: null,
+    id_number: null,
+    dob: null,
+    id_expiry_date: null,
+    id_expiry_checked: false,
+    indigenous_affiliation: null,
+    affiliation_document_path: null,
+    id_document_path: null,
+    id_document_back_path: null,
+    proof_of_craft_path: null,
+    product_sample_1_path: null,
+    product_sample_2_path: null,
+    selfie_path: null,
+    face_matched: null,
+    face_confidence: null,
+    duplicate_face_match: null,
+    liveness_status: null,
+    liveness_challenges: [],
+    liveness_verified_at: null,
+    registration_notes: null,
+    verification_status: 'pending',
+    application_submitted: false,
+    verification_criteria: [],
+    verification_decision: 'manual_review',
+  });
+  const warning = await cleanupStoredFiles(mediaPaths);
+  invalidate('artisans*');
+  invalidate('admin:stats');
+  return { deleted: true, ...(warning ? { warning } : {}) };
+}
+
 export async function deleteArtisan(id: number): Promise<DeleteAccountResult> {
   syncFromCore();
   let mediaPaths: string[] = [];

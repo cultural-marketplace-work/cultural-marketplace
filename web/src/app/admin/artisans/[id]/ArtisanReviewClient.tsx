@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { RuleResult, VerificationDecision } from '@/lib/verificationRules';
+import { LogoLoadingOverlay } from '@/components/LogoLoading';
 
 interface EvidenceItem {
   key: string;
@@ -37,6 +38,25 @@ const RULE_STYLE = {
   review: 'bg-amber-50 text-amber-800 border border-amber-200 font-semibold',
   fail: 'bg-crimson-50 text-crimson-800 border border-crimson-200',
 } as const;
+
+function formatDateOnly(value: string | null): string {
+  if (!value) return '—';
+
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const numeric = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (numeric) {
+    const first = Number(numeric[1]);
+    const second = Number(numeric[2]);
+    const year = Number(numeric[3]);
+    const day = first > 12 ? first : second > 12 ? second : first;
+    const month = first > 12 ? second : second > 12 ? first : second;
+    return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+  }
+
+  return value;
+}
 
 export default function ArtisanReviewClient({ artisan, productCount, rules, ruleSummary, evidence }: Props) {
   const router = useRouter();
@@ -76,31 +96,36 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
   }
 
   async function remove() {
-    if (!confirm(`Delete artisan ${artisan.name}'s account and personal data? Sales records will remain anonymized, and their products will be replaced with generic inactive records. This cannot be undone.`)) return;
+    if (!confirm(`Delete ${artisan.name}'s verification application? Their artisan account will remain active, but submitted verification documents and application results will be removed. This cannot be undone.`)) return;
     setBusy(true);
     setMsg('');
     try {
       const res = await fetch('/api/admin/artisans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', id: artisan.id }),
+        body: JSON.stringify({ action: 'delete_application', id: artisan.id }),
       });
       const data = await res.json();
       if (!res.ok || data.status !== 'success') {
-        setMsg(data.message ?? 'Could not delete artisan.');
+        setMsg(data.message ?? 'Could not delete verification application.');
         setBusy(false);
         return;
       }
-      if (data.warning) alert(data.warning);
-      router.push('/admin/artisans');
+      setMsg(data.warning
+        ? `Verification application deleted. ${data.warning}`
+        : 'Verification application deleted. The artisan account was preserved.');
+      setBusy(false);
+      router.refresh();
     } catch {
-      setMsg('Unable to delete artisan. Please try again.');
+      setMsg('Unable to delete the verification application. Please try again.');
       setBusy(false);
     }
   }
 
   return (
-    <div className="mt-6 grid gap-6 lg:grid-cols-2">
+    <>
+      {busy && <LogoLoadingOverlay message="Processing verification…" />}
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <div className="card space-y-3 p-5">
         <h2 className="font-serif text-lg font-bold text-brand-900">Profile details</h2>
         <div className="grid grid-cols-2 gap-3">
@@ -173,15 +198,15 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
           <dl className="space-y-1 text-sm text-stone-600">
             <div className="flex justify-between"><dt>Status</dt><dd><span className="badge bg-stone-100 capitalize">{form.status}</span></dd></div>
             <div className="flex justify-between"><dt>ID type</dt><dd>{artisan.id_type ?? '—'}</dd></div>
-            <div className="flex justify-between"><dt>ID expiry</dt><dd>{artisan.id_expiry_date ?? (artisan.id_expiry_checked ? 'No expiry shown by OCR' : 'Manual review required')}</dd></div>
+            <div className="flex justify-between"><dt>ID expiry</dt><dd>{artisan.id_expiry_date ? formatDateOnly(artisan.id_expiry_date) : (artisan.id_expiry_checked ? 'No expiry shown by OCR' : 'Manual review required')}</dd></div>
             <div className="flex justify-between"><dt>ID number</dt><dd className="font-mono text-xs">{form.id_number ?? '—'}</dd></div>
             <div className="flex justify-between"><dt>Liveness</dt><dd>{artisan.liveness_status === 'passed' ? 'Browser challenges passed — review required' : 'Manual review'}</dd></div>
             <div className="flex justify-between"><dt>Face-to-ID</dt><dd>{artisan.face_matched === true ? `Match (${Math.round((artisan.face_confidence ?? 0) * 100)}%)` : artisan.face_matched === false ? 'Below threshold' : 'Manual review'}</dd></div>
             <div className="flex justify-between"><dt>Duplicate face</dt><dd>{artisan.duplicate_face_match === false ? 'No match found' : artisan.duplicate_face_match === true ? 'Possible duplicate' : 'Not checked'}</dd></div>
             <div className="flex justify-between"><dt>Challenges</dt><dd>{artisan.liveness_challenges.length ? artisan.liveness_challenges.map((challenge) => challenge === 'blink_twice' ? 'Blink twice' : challenge === 'turn_both_sides' ? 'Turn both ways' : challenge).join(', ') : '—'}</dd></div>
-            {artisan.liveness_verified_at && <div className="flex justify-between"><dt>Liveness time</dt><dd>{new Date(artisan.liveness_verified_at).toISOString()}</dd></div>}
+            {artisan.liveness_verified_at && <div className="flex justify-between"><dt>Liveness time</dt><dd>{formatDateOnly(artisan.liveness_verified_at)}</dd></div>}
             <div className="flex justify-between"><dt>Indigenous affiliation</dt><dd>{artisan.indigenous_affiliation ?? '—'}</dd></div>
-            <div className="flex justify-between"><dt>Date of birth</dt><dd>{form.dob ?? '—'}</dd></div>
+            <div className="flex justify-between"><dt>Date of birth</dt><dd>{formatDateOnly(form.dob)}</dd></div>
             <div className="flex justify-between"><dt>Products</dt><dd>{productCount}</dd></div>
           </dl>
           {artisan.registration_notes && (
@@ -196,7 +221,7 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
             {artisan.application_submitted && form.status !== 'approved' && <button className="btn-primary px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('approved')}>Approve</button>}
             {artisan.application_submitted && form.status !== 'suspended' && <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('suspended')}>Suspend</button>}
             {artisan.application_submitted && form.status !== 'rejected' && <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={() => setStatus('rejected')}>Reject</button>}
-            <button className="btn-danger px-3 py-1 text-xs" disabled={busy} onClick={remove}>Delete</button>
+            <button className="btn-danger px-3 py-1 text-xs" disabled={busy} onClick={remove}>Delete Verification</button>
           </div>
         </div>
       </div>
@@ -215,6 +240,7 @@ export default function ArtisanReviewClient({ artisan, productCount, rules, rule
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
