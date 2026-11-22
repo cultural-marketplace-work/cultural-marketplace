@@ -1,3 +1,4 @@
+
 import { listCustomers } from '@/lib/db';
 import CustomersClient from './CustomersClient';
 import { UsersRound } from 'lucide-react';
@@ -6,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminCustomersPage() {
   const customers = await listCustomers();
+
   return (
     <div className="mx-auto max-w-7xl font-sans">
       <header className="relative isolate overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#4b1717] via-[#7f2422] to-[#9E2A2B] px-6 py-7 text-white shadow-lg sm:px-9 sm:py-9">
@@ -31,12 +33,29 @@ export default async function AdminCustomersPage() {
           </div>
         </div>
       </header>
+    <div className="min-w-0">
+      <div className="flex flex-col gap-1">
+        <h1 className="font-sculpted text-2xl font-bold text-charcoal-900">
+          Customer Management
+        </h1>
+        <p className="text-sm text-stone-500">
+          Manage customer accounts, review their order activity, and maintain
+          customer information.
+        </p>
+      </div>
+
       <CustomersClient
-        initial={customers.map((c) => ({
-          id: c.id, name: c.name, email: c.email, phone: c.phone, location: c.location,
-          order_count: c.order_count, status: c.status,
-        }))}
-      />
+  initial={customers.map((c) => ({
+    id: c.id,
+    name: c.name,
+    email: c.email,
+    phone: c.phone,
+    location: c.location,
+    profile_picture: c.profile_picture,
+    order_count: c.order_count,
+    status: c.status,
+  }))}
+/>
     </div>
   );
 }

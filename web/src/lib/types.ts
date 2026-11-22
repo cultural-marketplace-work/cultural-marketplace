@@ -61,6 +61,7 @@ export interface CustomerRow {
   email: string;
   phone: string | null;
   location: string | null;
+  profile_picture: string | null;
   created_at?: string;
   order_count: number;
   status: 'active' | 'disabled';

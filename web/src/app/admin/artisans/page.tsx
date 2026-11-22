@@ -40,6 +40,7 @@ export default async function AdminArtisansPage() {
           </div>
         </div>
       </section>
+    <div>
       <ArtisansClient initial={withProducts.map((a) => ({
         id: a.id,
         name: a.name,
