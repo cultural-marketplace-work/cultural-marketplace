@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { getUser } from '@/lib/db';
 import PortalSidebar, { type NavSection } from '@/components/PortalSidebar';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ const SECTIONS: NavSection[] = [
 export default async function CustomerAccountLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session || session.role !== 'customer') redirect('/auth/login?next=/customer/account/dashboard');
+  const user = await getUser(session.id);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row bg-canvas">
@@ -30,7 +32,7 @@ export default async function CustomerAccountLayout({ children }: { children: Re
         sections={SECTIONS}
         portalHome="/customer/account/dashboard"
         portalLabel="Customer Account"
-        userName={session.name}
+        userName={user?.name || session.name}
         backLabel="Keep exploring crafts"
       />
       <main className="min-w-0 flex-1 bg-canvas p-4 md:p-8">{children}</main>

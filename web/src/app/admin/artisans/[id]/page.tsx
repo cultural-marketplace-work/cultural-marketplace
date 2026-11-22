@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import { getArtisanFull, listArtisanProducts } from '@/lib/db';
 import { getVerificationDocUrl } from '@/lib/storage';
 import { evaluateVerificationRules, rulesSummary } from '@/lib/verificationRules';
@@ -65,8 +67,28 @@ export default async function AdminArtisanReviewPage({ params }: { params: Promi
   );
 
   return (
-    <div>
-      <h1 className="font-serif text-2xl font-bold text-brand-900">Review: {artisan.name}</h1>
+    <main className="mx-auto max-w-7xl font-sans">
+      <Link
+        href="/admin/artisans"
+        className="inline-flex min-h-10 items-center gap-2 rounded-xl px-2 text-sm font-semibold text-brand-800 transition hover:bg-ochre-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ochre-700"
+      >
+        <ArrowLeft size={16} aria-hidden="true" />
+        Back to artisan directory
+      </Link>
+      <header className="mt-4 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-abaca-200/80 bg-gradient-to-r from-[#fffaf0] via-white to-[#f8f2e7] px-5 py-5 shadow-sm sm:px-7">
+        <div>
+          <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ochre-800">
+            <ShieldCheck size={14} aria-hidden="true" />
+            Artisan application review
+          </p>
+          <h1 className="mt-2 font-serif text-2xl font-bold text-brand-900 sm:text-3xl">
+            Review: {artisan.name}
+          </h1>
+          <p className="mt-1 text-sm leading-5 text-stone-600">
+            Check the profile, verification results, and submitted evidence before making a decision.
+          </p>
+        </div>
+      </header>
       <ArtisanReviewClient
         artisan={{
           id: artisan.id, name: artisan.name, email: artisan.email, phone: artisan.phone,
@@ -90,6 +112,6 @@ export default async function AdminArtisanReviewPage({ params }: { params: Promi
         ruleSummary={summary}
         evidence={evidence}
       />
-    </div>
+    </main>
   );
 }

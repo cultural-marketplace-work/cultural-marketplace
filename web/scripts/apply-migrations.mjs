@@ -23,6 +23,7 @@ const files = [
   '../supabase/migrations/0013_user_data_anonymization.sql',
   '../supabase/migrations/0014_account_table_consolidation.sql',
   '../supabase/migrations/0015_sync_identity_sequences.sql',
+  '../supabase/migrations/0019_artisan_language_preferences.sql',
 ];
 
 let failed = false;

@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
-import { getArtisan } from '@/lib/db';
+import { getArtisan, listArtisanUiTranslations } from '@/lib/db';
 import PortalSidebar, { type NavSection } from '@/components/PortalSidebar';
+import { ArtisanLanguageProvider } from '@/components/ArtisanLanguageProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,8 @@ export default async function ArtisanLayout({ children }: { children: React.Reac
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/dashboard');
   const artisan = await getArtisan(session.id);
   const isVerified = artisan?.verification_status === 'approved';
+  const language = artisan?.preferred_language ?? 'en';
+  const messages = await listArtisanUiTranslations(language);
   const sections = SECTIONS.map((section) => ({
     ...section,
     items: section.items.map((item) => ({
@@ -61,14 +64,16 @@ export default async function ArtisanLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row bg-canvas">
-      <PortalSidebar
-        sections={sections}
-        portalHome="/artisan/dashboard"
-        portalLabel="Artisan Dashboard"
-        userName={session.name}
-        backLabel="Browse the Marketplace"
-      />
-      <main className="min-w-0 flex-1 bg-canvas p-4 md:p-8">{children}</main>
+      <ArtisanLanguageProvider language={language} messages={messages}>
+        <PortalSidebar
+          sections={sections}
+          portalHome="/artisan/dashboard"
+          portalLabel="Artisan Dashboard"
+          userName={artisan?.name ?? session.name}
+          backLabel="Browse the Marketplace"
+        />
+        <main className="min-w-0 flex-1 bg-canvas p-4 md:p-8">{children}</main>
+      </ArtisanLanguageProvider>
     </div>
   );
 }

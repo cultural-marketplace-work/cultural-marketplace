@@ -16,7 +16,7 @@ import type { OcrApplicantFields } from '@/lib/ocrFields';
 import { faceEmbeddingEncryptionConfigured, listFaceEmbeddings, saveFaceEmbedding } from '@/lib/faceEmbeddings';
 import { logFaceAttempt } from '@/lib/faceLogs';
 import { uploadFile } from '@/lib/storage';
-import { compareHumanFaces, findDuplicateHumanEmbedding } from '@/lib/humanFaceVerification';
+import { compareHumanFaces, faceAssetsBaseUrl, findDuplicateHumanEmbedding } from '@/lib/humanFaceVerification';
 import { evaluateVerificationRules, verificationDecision } from '@/lib/verificationRules';
 
 // In-memory pending-artisan handoff shared with ../route.ts.s
@@ -81,6 +81,24 @@ async function isReadableImage(file: File | null, buffer: ArrayBuffer | null): P
 
 function contentHash(buffer: ArrayBuffer | null): string | null {
   return buffer ? createHash('sha256').update(Buffer.from(buffer)).digest('hex') : null;
+}
+
+function storageErrorDetails(error: unknown): { message: string; cause?: string; code?: string } {
+  const rootMessage = error instanceof Error ? error.message : 'Unknown storage error';
+  let current: unknown = error;
+  let deepestMessage: string | undefined;
+  let deepestCode: string | undefined;
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth++) {
+    const item = current as Record<string, unknown>;
+    if (typeof item.message === 'string') deepestMessage = item.message;
+    if (typeof item.code === 'string') deepestCode = item.code;
+    current = item.originalError ?? item.cause;
+  }
+  return {
+    message: rootMessage,
+    ...(deepestMessage && deepestMessage !== rootMessage ? { cause: deepestMessage } : {}),
+    ...(deepestCode ? { code: deepestCode } : {}),
+  };
 }
 
 function isDuplicateIdConflict(error: unknown): boolean {
@@ -189,6 +207,7 @@ export async function POST(req: Request) {
     }
 
     const notes: string[] = [];
+    const faceAssetsUrl = faceAssetsBaseUrl(req.url);
     const expectedChallengeOrder = (d.liveness_challenge_order ?? '').split(',');
     const liveness = parseLivenessResult(form.get('liveness_result'), expectedChallengeOrder);
     await safeLogFaceAttempt({
@@ -234,7 +253,7 @@ export async function POST(req: Request) {
     let verify: Awaited<ReturnType<typeof compareHumanFaces>> | { status: 'error'; message: string };
     if (idFrontBuf && selfieBuf) {
       try {
-        verify = await compareHumanFaces(idFrontBuf, selfieBuf);
+        verify = await compareHumanFaces(idFrontBuf, selfieBuf, faceAssetsUrl);
       } catch (cause) {
         verify = { status: 'error', message: cause instanceof Error ? cause.message : 'Unknown Human.js error.' };
       }
@@ -276,7 +295,12 @@ export async function POST(req: Request) {
         selfieEmbedding = null;
       } else try {
         const stored = await listFaceEmbeddings();
-        const duplicate = await findDuplicateHumanEmbedding(selfieEmbedding, stored, existingArtisan.id);
+        const duplicate = await findDuplicateHumanEmbedding(
+          selfieEmbedding,
+          stored,
+          existingArtisan.id,
+          faceAssetsUrl,
+        );
         duplicateFaceMatch = Boolean(duplicate);
         if (duplicate) {
           duplicateOf = duplicate.artisanId;
@@ -342,7 +366,7 @@ export async function POST(req: Request) {
         );
         return result.path;
       } catch (error) {
-        console.error(`[artisan-verification] ${name} upload failed:`, error instanceof Error ? error.message : error);
+        console.error(`[artisan-verification] ${name} upload failed:`, storageErrorDetails(error));
         notes.push(`${name} could not be stored; admin review is required.`);
         return null;
       }

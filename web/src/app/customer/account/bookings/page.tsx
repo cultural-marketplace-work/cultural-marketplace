@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
-import { listCustomerBookings } from '@/lib/db';
+import { getUser, listCustomerBookings } from '@/lib/db';
 import CustomerBookingsClient from './CustomerBookingsClient';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,10 @@ export default async function CustomerBookingsPage() {
   const session = await getSession();
   if (!session || session.role !== 'customer') redirect('/auth/login?next=/customer/account/bookings');
 
-  const bookings = await listCustomerBookings(session.id);
+  const [bookings, user] = await Promise.all([
+    listCustomerBookings(session.id),
+    getUser(session.id),
+  ]);
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 space-y-6">
@@ -22,7 +25,7 @@ export default async function CustomerBookingsPage() {
         </div>
       </div>
 
-      <CustomerBookingsClient initial={bookings} customerName={session.name} />
+      <CustomerBookingsClient initial={bookings} customerName={user?.name || session.name} />
     </main>
   );
 }

@@ -36,6 +36,7 @@ export async function POST(req: Request) {
       email,
       phone: pending.phone,
       password: await hashPassword(pending.password),
+      preferred_language: pending.preferred_language,
     });
     await deletePendingRegistration(email);
     await createSession({ id, name: pending.name, role: 'artisan', email, profile_picture: null });

@@ -23,9 +23,33 @@ export const storageEnabled = Boolean(SUPABASE_URL && SERVICE_KEY);
 export type Bucket = 'product-media' | 'profile-pictures' | 'verification-docs';
 
 const PUBLIC_BUCKETS: Bucket[] = ['product-media', 'profile-pictures'];
+let supabaseStorageClient: ReturnType<typeof createClient> | null = null;
 
 function client() {
-  return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  if (!supabaseStorageClient) {
+    supabaseStorageClient = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  }
+  return supabaseStorageClient;
+}
+
+function isTransientFetchFailure(error: unknown): boolean {
+  const transientCodes = new Set([
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'EAI_AGAIN',
+    'ENETUNREACH',
+    'ECONNREFUSED',
+    'UND_ERR_CONNECT_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+  ]);
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth++) {
+    const item = current as { code?: unknown; message?: unknown; cause?: unknown; originalError?: unknown };
+    if (typeof item.code === 'string' && transientCodes.has(item.code)) return true;
+    if (typeof item.message === 'string' && item.message.toLowerCase().includes('fetch failed')) return true;
+    current = item.originalError ?? item.cause;
+  }
+  return false;
 }
 
 export type UploadResult = { path: string | null; publicUrl: string | null };
@@ -41,8 +65,23 @@ export function objectPath(prefix: string, originalName: string): string {
 export async function uploadFile(bucket: Bucket, objectPathStr: string, data: ArrayBuffer, contentType: string): Promise<UploadResult> {
   if (storageEnabled) {
     const sb = client();
-    const { error } = await sb.storage.from(bucket).upload(objectPathStr, data, { contentType, upsert: true });
-    if (error) throw new Error(`Storage upload failed: ${error.message}`);
+    let uploadError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { error } = await sb.storage.from(bucket).upload(objectPathStr, data, { contentType, upsert: true });
+      if (!error) {
+        uploadError = null;
+        break;
+      }
+      uploadError = error;
+      if (attempt === 0 && isTransientFetchFailure(error)) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        continue;
+      }
+      break;
+    }
+    if (uploadError) {
+      throw new Error(`Storage upload failed: ${uploadError.message}`, { cause: uploadError });
+    }
     const publicUrl = PUBLIC_BUCKETS.includes(bucket)
       ? sb.storage.from(bucket).getPublicUrl(objectPathStr).data.publicUrl
       : null;

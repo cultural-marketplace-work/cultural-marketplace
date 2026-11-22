@@ -16,6 +16,7 @@ import {
 import ArtisanHeader from '@/components/ArtisanHeader';
 import WeaveDivider from '@/components/WeaveDivider';
 import { LogoLoading, LogoLoadingOverlay } from '@/components/LogoLoading';
+import { ArtisanLanguageProvider, type ArtisanMessages } from '@/components/ArtisanLanguageProvider';
 import type Tesseract from 'tesseract.js';
 import type { FaceLandmarker } from '@mediapipe/tasks-vision';
 import {
@@ -37,8 +38,9 @@ type LivenessStatus = 'idle' | 'loading' | 'checking' | 'passed' | 'unavailable'
 
 const DRAFT_STORAGE_KEY = 'cm_artisan_reg_draft_v2';
 
-export default function ArtisanRegistrationForm({ applicant }: {
+export default function ArtisanRegistrationForm({ applicant, messages = {} }: {
   applicant?: { name: string; email: string; phone: string | null; location?: string | null };
+  messages?: ArtisanMessages;
 } = {}) {
   const router = useRouter();
   const draftStorageKey = applicant ? `${DRAFT_STORAGE_KEY}_${applicant.email.toLowerCase()}` : DRAFT_STORAGE_KEY;
@@ -46,6 +48,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
   const [form, setForm] = useState({
     name: applicant?.name ?? '',
     email: applicant?.email ?? '',
+    preferred_language: 'en' as 'en' | 'ceb',
     password: '',
     phone: applicant?.phone ?? '',
     location: applicant?.location ?? '',
@@ -56,6 +59,9 @@ export default function ArtisanRegistrationForm({ applicant }: {
     id_number: '',
     dob: '',
   });
+  const t = (sourceText: string) => form.preferred_language === 'ceb'
+    ? messages[sourceText] ?? sourceText
+    : sourceText;
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [passwordConfirmationVisible, setPasswordConfirmationVisible] = useState(false);
@@ -134,7 +140,13 @@ export default function ArtisanRegistrationForm({ applicant }: {
       const data = JSON.parse(saved);
       if (data && typeof data === 'object') {
         setAccountNoticeOpen(data.step === 'account');
-        if (data.form) setForm((prev) => ({ ...prev, ...data.form }));
+        if (data.form) {
+          setForm((prev) => ({
+            ...prev,
+            ...data.form,
+            preferred_language: data.form.preferred_language === 'ceb' ? 'ceb' : 'en',
+          }));
+        }
         if (typeof data.firstName === 'string' && typeof data.lastName === 'string') {
           setFirstName(data.firstName);
           setLastName(data.lastName);
@@ -265,6 +277,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
     setPasswordConfirmationVisible(false);
     setForm({
       name: applicant?.name ?? '', email: applicant?.email ?? '', password: '', phone: applicant?.phone ?? '',
+      preferred_language: 'en',
       location: applicant?.location ?? '', id_type: '', craft_type: '', business_name: '',
       indigenous_affiliation: '', id_number: '', dob: '',
     });
@@ -328,6 +341,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
           name: fullName,
           email: form.email,
           phone: form.phone,
+          preferred_language: form.preferred_language,
           password: form.password,
           password_confirmation: passwordConfirmation,
           terms: termsAccepted,
@@ -1039,12 +1053,13 @@ export default function ArtisanRegistrationForm({ applicant }: {
       : '';
 
       return (
+    <ArtisanLanguageProvider language={form.preferred_language} messages={messages}>
     <main className={step === 'account' || step === 'otp' || compactVerification
       ? 'flex min-h-screen items-center justify-center bg-canvas px-3 py-8'
       : 'min-h-screen bg-canvas px-4 py-10'}>
   <div className={`mx-auto w-full ${
     step === 'account'
-      ? 'max-w-[280px]'
+      ? 'max-w-md'
       : step === 'otp'
         ? 'max-w-[335px]'
         : compactVerification
@@ -1075,7 +1090,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
       )}
 
       {step === 'account' && (
-        <section className="overflow-hidden rounded-[18px] border border-stone-300 bg-white">
+        <section className="overflow-hidden rounded-3xl border border-abaca-200 bg-white shadow-lg">
           <Link
             href="/"
             aria-label="Cultural Marketplace — home"
@@ -1084,73 +1099,89 @@ export default function ArtisanRegistrationForm({ applicant }: {
             <img
               src="/images/cultural-marketplace-logo.png"
               alt="Cultural Marketplace Logo"
-              className="h-7 w-auto max-w-[48px] object-contain"
+              className="h-10 w-auto max-w-[60px] object-contain"
             />
             <div className="flex min-w-0 flex-col leading-tight">
               <p className="text-[13px] font-extrabold tracking-tight">
                 <span className="text-[#8B0000]">Cultural</span>{' '}
                 <span className="text-[#FFA500]">Marketplace</span>
               </p>
-              <p className="mt-0.5 text-[5px] font-bold text-[#B00000]">
+              <p className="mt-0.5 text-[9px] font-bold text-[#B00000]">
                 Agusan del Sur Indigenous Crafts and Experiences
               </p>
             </div>
           </Link>
           <WeaveDivider pattern="kalinga" className="!h-2" />
 
-          <div className="px-[10px] pb-5 pt-3">
+          <div className="px-5 pb-6 pt-5 sm:px-7">
             <div className="text-center">
-              <h1 className="font-serif text-[15px] font-bold leading-tight text-charcoal-900">
-                Create an Artisan Account
+              <h1 className="font-serif text-2xl font-bold leading-tight text-brand-900">
+                {t('Create an Artisan Account')}
               </h1>
-              <p className="mx-auto mt-2 max-w-[245px] text-[8px] leading-[1.4] text-stone-600">
-                Join our community of Indigenous artisans in Agusan del Sur. Share your traditional crafts, showcase your skills, and offer cultural workshops to people who want to learn about your heritage.
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-stone-600">
+                {t('Join our community of Indigenous artisans in Agusan del Sur. Share your traditional crafts, showcase your skills, and offer cultural workshops to people who want to learn about your heritage.')}
               </p>
             </div>
 
-            <form onSubmit={createAccount} className="mt-3 border-t border-stone-200 pt-3">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={createAccount} className="mt-5 space-y-4 border-t border-stone-100 pt-5">
+              <div className="rounded-2xl border border-abaca-200 bg-canvas/70 p-4">
+                <label className="mb-1.5 block text-sm font-semibold text-stone-800" htmlFor="account-language">
+                  {t('Language preference')}
+                </label>
+                <select
+                  id="account-language"
+                  className="input min-h-11"
+                  value={form.preferred_language}
+                  onChange={(e) => set('preferred_language', e.target.value as 'en' | 'ceb')}
+                >
+                  <option value="en">English — Default</option>
+                  <option value="ceb">Bisaya (Cebuano)</option>
+                </select>
+                <p className="mt-1.5 text-xs leading-5 text-stone-500">{t('Choose the language you are most comfortable using.')}</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-[7px] text-stone-600" htmlFor="account-first-name">First name</label>
+                  <label className="mb-1.5 block text-sm font-semibold text-stone-700" htmlFor="account-first-name">{t('First name')}</label>
                   <input
                     id="account-first-name"
                     required
                     maxLength={100}
                     autoComplete="given-name"
-                    className="h-[17px] w-full rounded-[3px] border border-stone-300 px-1 text-[8px] focus:border-crimson-600 focus:outline-none focus:ring-1 focus:ring-crimson-600"
+                    className="input min-h-11"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[7px] text-stone-600" htmlFor="account-last-name">Last name</label>
+                  <label className="mb-1.5 block text-sm font-semibold text-stone-700" htmlFor="account-last-name">{t('Last name')}</label>
                   <input
                     id="account-last-name"
                     required
                     maxLength={100}
                     autoComplete="family-name"
-                    className="h-[17px] w-full rounded-[3px] border border-stone-300 px-1 text-[8px] focus:border-crimson-600 focus:outline-none focus:ring-1 focus:ring-crimson-600"
+                    className="input min-h-11"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="mt-2">
-                <label className="mb-1 block text-[7px] text-stone-600" htmlFor="account-email">Email</label>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-stone-700" htmlFor="account-email">{t('Email')}</label>
                 <input
                   id="account-email"
                   type="email"
                   required
                   autoComplete="email"
-                  className="h-[17px] w-full rounded-[3px] border border-stone-300 px-1 text-[8px] focus:border-crimson-600 focus:outline-none focus:ring-1 focus:ring-crimson-600"
+                  className="input min-h-11"
                   value={form.email}
                   onChange={(e) => set('email', e.target.value)}
                 />
               </div>
 
-              <div className="mt-2">
-                <label className="mb-1 block text-[7px] text-stone-600" htmlFor="account-phone">Mobile number</label>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-stone-700" htmlFor="account-phone">{t('Mobile number')}</label>
                 <input
                   id="account-phone"
                   type="tel"
@@ -1158,15 +1189,15 @@ export default function ArtisanRegistrationForm({ applicant }: {
                   pattern="09[0-9]{9}"
                   maxLength={11}
                   autoComplete="tel"
-                  className="h-[17px] w-full rounded-[3px] border border-stone-300 px-1 text-[8px] focus:border-crimson-600 focus:outline-none focus:ring-1 focus:ring-crimson-600"
+                  className="input min-h-11"
                   value={form.phone}
                   onChange={(e) => set('phone', e.target.value.replace(/\D/g, '').slice(0, 11))}
                 />
               </div>
 
-              <div className="mt-2 grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-[7px] text-stone-600" htmlFor="account-password">Password</label>
+                  <label className="mb-1.5 block text-sm font-semibold text-stone-700" htmlFor="account-password">{t('Password')}</label>
                   <div className="relative">
                     <input
                       id="account-password"
@@ -1175,30 +1206,30 @@ export default function ArtisanRegistrationForm({ applicant }: {
                       minLength={8}
                       autoComplete="new-password"
                       aria-describedby="account-password-hint"
-                      className="h-[17px] w-full rounded-[3px] border border-stone-300 px-1 pr-5 text-[8px] focus:border-crimson-600 focus:outline-none focus:ring-1 focus:ring-crimson-600"
+                      className="input min-h-11 pr-10"
                       value={form.password}
                       onChange={(e) => set('password', e.target.value)}
                     />
                     <button
                       type="button"
-                      aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                      aria-label={passwordVisible ? t('Hide password') : t('Show password')}
                       aria-pressed={passwordVisible}
-                      className="absolute inset-y-0 right-1 flex items-center text-stone-500 hover:text-crimson-700"
+                      className="absolute inset-y-0 right-2 flex items-center rounded-md px-1 text-stone-500 hover:text-crimson-700"
                       onClick={() => setPasswordVisible((visible) => !visible)}
                     >
-                      {passwordVisible ? <EyeOff size={9} /> : <Eye size={9} />}
+                      {passwordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
                     </button>
                   </div>
                   <p
                     id="account-password-hint"
-                    className={`mt-1 text-[6px] ${form.password.length >= 8 ? 'text-emerald-700' : 'text-stone-400'}`}
+                    className={`mt-1.5 text-xs ${form.password.length >= 8 ? 'text-emerald-700' : 'text-stone-500'}`}
                     aria-live="polite"
                   >
-                    {form.password.length >= 8 ? 'Password meets the minimum length' : 'Minimum 8 characters'}
+                    {form.password.length >= 8 ? t('Password meets the minimum length') : t('Minimum 8 characters')}
                   </p>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[7px] text-stone-600" htmlFor="account-password-confirmation">Confirm Password</label>
+                  <label className="mb-1.5 block text-sm font-semibold text-stone-700" htmlFor="account-password-confirmation">{t('Confirm password')}</label>
                   <div className="relative">
                     <input
                       id="account-password-confirmation"
@@ -1208,7 +1239,7 @@ export default function ArtisanRegistrationForm({ applicant }: {
                       autoComplete="new-password"
                       aria-describedby="account-password-confirmation-hint"
                       aria-invalid={Boolean(passwordConfirmation) && passwordConfirmation !== form.password}
-                      className={`h-[17px] w-full rounded-[3px] border px-1 pr-5 text-[8px] focus:outline-none focus:ring-1 ${
+                      className={`min-h-11 w-full rounded-xl border px-3 pr-10 text-sm focus:outline-none focus:ring-1 ${
                         passwordConfirmation && passwordConfirmation !== form.password
                           ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
                           : 'border-stone-300 focus:border-crimson-600 focus:ring-crimson-600'
@@ -1218,17 +1249,17 @@ export default function ArtisanRegistrationForm({ applicant }: {
                     />
                     <button
                       type="button"
-                      aria-label={passwordConfirmationVisible ? 'Hide confirmation password' : 'Show confirmation password'}
+                      aria-label={passwordConfirmationVisible ? t('Hide confirmation password') : t('Show confirmation password')}
                       aria-pressed={passwordConfirmationVisible}
-                      className="absolute inset-y-0 right-1 flex items-center text-stone-500 hover:text-crimson-700"
+                      className="absolute inset-y-0 right-2 flex items-center rounded-md px-1 text-stone-500 hover:text-crimson-700"
                       onClick={() => setPasswordConfirmationVisible((visible) => !visible)}
                     >
-                      {passwordConfirmationVisible ? <EyeOff size={9} /> : <Eye size={9} />}
+                      {passwordConfirmationVisible ? <EyeOff size={17} /> : <Eye size={17} />}
                     </button>
                   </div>
                   <p
                     id="account-password-confirmation-hint"
-                    className={`mt-1 flex min-h-[8px] items-center gap-0.5 text-[6px] ${
+                    className={`mt-1.5 flex min-h-[16px] items-center gap-1 text-xs ${
                       !passwordConfirmation
                         ? 'text-stone-400'
                         : passwordConfirmation === form.password
@@ -1239,45 +1270,45 @@ export default function ArtisanRegistrationForm({ applicant }: {
                   >
                     {passwordConfirmation
                       ? passwordConfirmation === form.password
-                        ? <><CheckCircle2 size={7} aria-hidden="true" /> Passwords match</>
-                        : <><X size={7} aria-hidden="true" /> Passwords do not match</>
-                      : 'Re-enter your password'}
+                        ? <><CheckCircle2 size={13} aria-hidden="true" /> {t('Passwords match')}</>
+                        : <><X size={13} aria-hidden="true" /> {t('Passwords do not match')}</>
+                      : t('Re-enter your password')}
                   </p>
                 </div>
               </div>
 
-              <label className="mt-2 flex items-center gap-1.5 text-[7px] leading-tight text-stone-600">
+              <label className="flex items-start gap-2 text-sm leading-5 text-stone-600">
                 <input
                   type="checkbox"
                   required
                   checked={termsAccepted}
                   onChange={(e) => setTermsAccepted(e.target.checked)}
-                  className="h-2.5 w-2.5 rounded-sm border-stone-300"
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 accent-crimson-600"
                 />
                 <span>
-                  I agree to the <span className="underline">Terms &amp; Conditions</span> and{' '}
-                  <span className="underline">Privacy Policy</span>.
+                  {t('I agree to the')} <span className="underline">{t('Terms & Conditions')}</span> {t('and')}{' '}
+                  <span className="underline">{t('Privacy Policy')}</span>.
                 </span>
               </label>
 
-              {error && <p className="mt-2 rounded border border-red-200 bg-red-50 p-1.5 text-[8px] text-red-700">{error}</p>}
+              {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
               <button
                 type="submit"
-                className="mt-3 h-7 w-full rounded-[3px] bg-[#a00000] text-[8px] font-bold text-white transition hover:bg-[#850000] disabled:opacity-60"
+                className="btn-primary min-h-11 w-full"
                 disabled={busy}
               >
-                {busy ? 'Creating account…' : 'Continue'}
+                {busy ? t('Creating account…') : t('Continue')}
               </button>
             </form>
 
-            <div className="mt-2 text-center text-[7px] leading-tight text-stone-500">
+            <div className="mt-4 text-center text-sm text-stone-600">
               <p>
-                Already have an account?{' '}
-                <Link href="/auth/login" className="font-semibold text-crimson-700 underline">Log in</Link>
+                {t('Already have an account?')}{' '}
+                <Link href="/auth/login" className="font-semibold text-crimson-700 underline">{t('Log in')}</Link>
               </p>
-              <Link href="/" className="mt-0.5 inline-flex items-center gap-1 text-stone-500 hover:text-crimson-700">
-                <Home size={9} aria-hidden="true" />
-                Return to Marketplace
+              <Link href="/" className="mt-2 inline-flex items-center gap-1.5 text-stone-500 hover:text-crimson-700">
+                <Home size={15} aria-hidden="true" />
+                {t('Return to Marketplace')}
               </Link>
             </div>
           </div>
@@ -2338,5 +2369,6 @@ export default function ArtisanRegistrationForm({ applicant }: {
       )}
       {loadingMessage && <LogoLoadingOverlay message={loadingMessage} />}
 </main>
+    </ArtisanLanguageProvider>
   );
 }
