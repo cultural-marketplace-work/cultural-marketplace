@@ -824,11 +824,10 @@ export async function deleteArtisan(id: number): Promise<DeleteAccountResult> {
     for (const key of ['image_2_path', 'image_3_path', 'image_4_path', 'nfc_tag_history', 'attributes', 'tutorial_time', 'tutorial_venue_barangay', 'tutorial_venue_municipality', 'tutorial_venue_street', 'tutorial_venue_meeting_place', 'tutorial_gallery', 'tutorial_things_to_bring']) raw[key] = null;
   }
   for (const item of s.order_items.filter((entry) => entry.artisan_id === id)) {
-    mediaPaths.push(...collectStoredPaths(item.proof_of_receipt));
-    item.product_name = 'Deleted artisan product';
-    item.review_comment = null;
-    item.proof_of_receipt = null;
-  }
+  mediaPaths.push(...collectStoredPaths(item.proof_of_receipt));
+  item.review_comment = null;
+  item.proof_of_receipt = null;
+}
   for (const shipment of (core?.shipments ?? []).filter((entry) => entry.artisan_id === id)) {
     shipment.sender_name = 'Deleted artisan';
     shipment.sender_phone = '';
@@ -1072,20 +1071,66 @@ export async function suspendArtisanAccount(artisanId: number): Promise<void> {
 // Categories (admin)
 // ---------------------------------------------------------------------------
 // Case-insensitive duplicate check so "weaving" and "Weaving" can't coexist.
-export async function addCategory(name: string, type: 'product' | 'experience'): Promise<{ ok: boolean }> {
+
+
+export async function addCategory(
+  name: string,
+  type: 'product' | 'experience',
+): Promise<{
+  ok: boolean;
+  category?: { id: number; name: string; type: string };
+}> {
   syncFromCore();
+
   if (usingPg) {
-    const dup = (await sql`select id from categories where lower(name) = lower(${name}) and type = ${type}`)[0];
+    const dup = (await sql`
+      select id
+      from categories
+      where lower(name) = lower(${name}) and type = ${type}
+    `)[0];
+
     if (dup) return { ok: false };
-    await sql`insert into categories (name, type) values (${name}, ${type})`;
+
+    const rows = await sql`
+      insert into categories (name, type)
+      values (${name}, ${type})
+      returning id, name, type
+    `;
+
+    const row = rows[0] as Record<string, unknown>;
+    const category = {
+      id: n(row.id),
+      name: String(row.name),
+      type: String(row.type),
+    };
+
     invalidate('categories*');
-    return { ok: true };
+    return { ok: true, category };
   }
+
   const list = store().categories;
-  if (list.some((c) => c.name.toLowerCase() === name.toLowerCase() && c.type === type)) return { ok: false };
-  list.push({ id: Math.max(0, ...list.map((c) => c.id)) + 1, name, type });
-  return { ok: true };
+
+  if (
+    list.some(
+      (c) =>
+        c.name.toLowerCase() === name.toLowerCase() &&
+        c.type === type,
+    )
+  ) {
+    return { ok: false };
+  }
+
+  const category = {
+    id: Math.max(0, ...list.map((c) => c.id)) + 1,
+    name,
+    type,
+  };
+
+  list.push(category);
+  return { ok: true, category };
 }
+
+
 
 // Returns { ok: false, products } when products still reference the category,
 // so the admin UI can block deletion instead of orphaning listings.
@@ -1108,6 +1153,177 @@ export async function deleteCategoryDb(id: number): Promise<{ ok: boolean; produ
   s.categories = s.categories.filter((c) => c.id !== id);
   return { ok: true, products: 0 };
 }
+
+
+
+
+export interface CategoryOverviewRow {
+  id: number;
+  name: string;
+  type: string;
+  listing_count: number;
+  artisan_count: number;
+  units_ordered: number;
+}
+
+export interface CategoryOverview {
+  categories: CategoryOverviewRow[];
+  totals: {
+    category_count: number;
+    product_category_count: number;
+    experience_category_count: number;
+    listing_count: number;
+    artisan_count: number;
+    units_ordered: number;
+  };
+}
+
+function buildCategoryOverview(
+  categories: CategoryOverviewRow[],
+  totalArtisans: number,
+): CategoryOverview {
+  return {
+    categories,
+    totals: {
+      category_count: categories.length,
+      product_category_count: categories.filter(
+        (c) => c.type === 'product',
+      ).length,
+      experience_category_count: categories.filter(
+        (c) => c.type === 'experience',
+      ).length,
+      listing_count: categories.reduce(
+        (sum, c) => sum + c.listing_count,
+        0,
+      ),
+      artisan_count: totalArtisans,
+      units_ordered: categories.reduce(
+        (sum, c) => sum + c.units_ordered,
+        0,
+      ),
+    },
+  };
+}
+
+export async function getCategoryOverview(): Promise<CategoryOverview> {
+  if (usingPg) {
+    const rows = await sql`
+      select
+        c.id,
+        c.name,
+        c.type,
+
+        (
+          select count(*)
+          from products p
+          where lower(trim(coalesce(p.category, ''))) =
+                lower(trim(c.name))
+            and coalesce(p.has_tutorial, false) =
+                (c.type = 'experience')
+        ) as listing_count,
+
+        (
+          select count(distinct p.artisan_id)
+          from products p
+          where lower(trim(coalesce(p.category, ''))) =
+                lower(trim(c.name))
+            and coalesce(p.has_tutorial, false) =
+                (c.type = 'experience')
+        ) as artisan_count,
+
+        (
+          select coalesce(sum(oi.quantity), 0)
+          from products p
+          join order_items oi on oi.product_id = p.id
+          where lower(trim(coalesce(p.category, ''))) =
+                lower(trim(c.name))
+            and coalesce(p.has_tutorial, false) =
+                (c.type = 'experience')
+            and oi.status <> 'cancelled'
+        ) as units_ordered
+
+      from categories c
+      order by c.name
+    `;
+
+    const categories: CategoryOverviewRow[] = rows.map((row) => ({
+      id: n(row.id),
+      name: String(row.name),
+      type: String(row.type),
+      listing_count: n(row.listing_count),
+      artisan_count: n(row.artisan_count),
+      units_ordered: n(row.units_ordered),
+    }));
+
+    const artisanRows = await sql`
+      select count(distinct p.artisan_id) as artisan_count
+      from products p
+      where exists (
+        select 1
+        from categories c
+        where lower(trim(coalesce(p.category, ''))) =
+              lower(trim(c.name))
+          and coalesce(p.has_tutorial, false) =
+              (c.type = 'experience')
+      )
+    `;
+
+    const totalArtisans = n(artisanRows[0]?.artisan_count);
+
+    return buildCategoryOverview(categories, totalArtisans);
+  }
+
+  syncFromCore();
+
+  const s = store();
+
+  const categories: CategoryOverviewRow[] = s.categories.map((c) => {
+    const matchingProducts = s.products.filter(
+      (p) =>
+        (p.category ?? '').trim().toLowerCase() ===
+          c.name.trim().toLowerCase() &&
+        Boolean(p.has_tutorial) === (c.type === 'experience'),
+    );
+
+    const productIds = new Set(matchingProducts.map((p) => p.id));
+
+    const matchingOrders = s.order_items.filter(
+      (item) =>
+        productIds.has(item.product_id) &&
+        item.status !== 'cancelled',
+    );
+
+    return {
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      listing_count: matchingProducts.length,
+      artisan_count: new Set(
+        matchingProducts.map((p) => p.artisan_id),
+      ).size,
+      units_ordered: matchingOrders.reduce(
+        (sum, item) => sum + n(item.quantity),
+        0,
+      ),
+    };
+  });
+
+  const categorizedProducts = s.products.filter((p) =>
+    s.categories.some(
+      (c) =>
+        (p.category ?? '').trim().toLowerCase() ===
+          c.name.trim().toLowerCase() &&
+        Boolean(p.has_tutorial) === (c.type === 'experience'),
+    ),
+  );
+
+  const totalArtisans = new Set(
+    categorizedProducts.map((p) => p.artisan_id),
+  ).size;
+
+  return buildCategoryOverview(categories, totalArtisans);
+}
+
 
 // ---------------------------------------------------------------------------
 // Settings / homepage / announcements
