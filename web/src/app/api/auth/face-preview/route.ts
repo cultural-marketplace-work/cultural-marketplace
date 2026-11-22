@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { compareHumanFaces } from '@/lib/humanFaceVerification';
+import { compareHumanFaces, faceAssetsBaseUrl } from '@/lib/humanFaceVerification';
 import { logFaceAttempt } from '@/lib/faceLogs';
 
 export const runtime = 'nodejs';
@@ -23,7 +23,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = await compareHumanFaces(await idImage.arrayBuffer(), await selfie.arrayBuffer());
+    const result = await compareHumanFaces(
+      await idImage.arrayBuffer(),
+      await selfie.arrayBuffer(),
+      faceAssetsBaseUrl(req.url),
+    );
     if (result.status === 'ok') {
       const pct = Math.round(result.similarity * 100);
       return NextResponse.json({

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
-import { getArtisan } from '@/lib/db';
+import { getArtisan, listArtisanUiTranslations } from '@/lib/db';
 import ProfileForm from './ProfileForm';
 import ProfileHeader from './ProfileHeader';
 
@@ -14,13 +14,14 @@ export default async function ArtisanProfilePage() {
   }
 
   const artisan = await getArtisan(session.id);
+  const messages = await listArtisanUiTranslations(artisan?.preferred_language ?? 'en');
+  const t = (sourceText: string) => messages[sourceText] ?? sourceText;
 
   const artisanName = artisan?.name ?? session.name;
-  const businessName = artisan?.business_name || 'Your Handicrafts';
+  const businessName = artisan?.business_name || t('Your Handicrafts');
 
   return (
-    <main className="min-h-screen bg-[#FCF9F4]">
-      {/* PROFILE HEADER (client component with working upload) */}
+    <main className="mx-auto max-w-7xl">
       <ProfileHeader
         artisanId={session.id}
         name={artisanName}
@@ -28,13 +29,13 @@ export default async function ArtisanProfilePage() {
         profilePicture={artisan?.profile_picture ?? null}
       />
 
-      {/* PROFILE DIVIDER */}
-      {/* PROFILE DIVIDER */}
-<div className="h-px w-full bg-gray-300" />
-
-      {/* PROFILE FORM */}
-      <section className="px-4 py-5 md:px-8 md:py-6">
-        <div className="mx-auto max-w-2xl rounded-2xl border border-[#D6D0C9] bg-white p-5 shadow-sm sm:p-6">
+      <section className="mt-7">
+        <div className="mb-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ochre-800">{t('Account details')}</p>
+          <h2 className="mt-1 font-serif text-2xl font-bold text-brand-900">{t('Your artisan profile')}</h2>
+          <p className="mt-1 text-sm text-stone-500">{t('Keep your contact information and cultural story up to date.')}</p>
+        </div>
+        <div className="mx-auto max-w-4xl">
           <ProfileForm
             initial={{
               name: artisan?.name ?? session.name,
@@ -45,6 +46,7 @@ export default async function ArtisanProfilePage() {
               location: artisan?.location ?? '',
               bio: artisan?.bio ?? '',
               profile_picture: artisan?.profile_picture ?? null,
+              preferred_language: artisan?.preferred_language ?? 'en',
             }}
           />
         </div>

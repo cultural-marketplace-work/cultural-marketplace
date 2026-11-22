@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/prepare-human-assets.mjs",
+    "predev": "node scripts/prepare-human-assets.mjs",
     "dev": "next dev --turbopack -p 3100",
+    "prebuild": "node scripts/prepare-human-assets.mjs",
     "build": "next build",
     "start": "next start -p 3100",
-    "lint": "next lint"
+    "lint": "next lint",
+    "translations:artisan": "node --env-file=.env.local scripts/generate-artisan-translations.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.2.3",

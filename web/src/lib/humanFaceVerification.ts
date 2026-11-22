@@ -6,9 +6,6 @@ import type { StoredEmbedding } from './faceEmbeddings';
 export const HUMAN_FACE_EMBEDDING_SIZE = 1024;
 export const HUMAN_FACE_MATCH_THRESHOLD = 0.5;
 
-const MODEL_BASE_PATH = 'https://cdn.jsdelivr.net/npm/@vladmandic/human@3.3.6/models/';
-const WASM_PATH = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/';
-
 type HumanInstance = InstanceType<typeof HumanLibrary>;
 type HumanFace = Awaited<ReturnType<HumanInstance['detect']>>['face'][number];
 
@@ -23,13 +20,27 @@ export type HumanFaceComparison =
   | { status: 'no_face'; message: string };
 
 let humanPromise: Promise<HumanInstance> | null = null;
+let humanAssetBaseUrl: string | null = null;
 let inferenceQueue: Promise<void> = Promise.resolve();
 
-function createHuman(): HumanInstance {
+export function faceAssetsBaseUrl(requestUrl: string): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  const siteHostname = siteUrl ? new URL(siteUrl).hostname : '';
+  const productionLocalhost = process.env.NODE_ENV === 'production' &&
+    (siteHostname === 'localhost' || siteHostname === '127.0.0.1');
+  const configuredUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : productionLocalhost ? requestUrl : siteUrl || requestUrl;
+  return new URL('/models/', configuredUrl).href;
+}
+
+function createHuman(assetBaseUrl: string): HumanInstance {
+  const baseUrl = assetBaseUrl.endsWith('/') ? assetBaseUrl : `${assetBaseUrl}/`;
   const config: Partial<HumanConfig> = {
     backend: 'wasm',
-    wasmPath: WASM_PATH,
-    modelBasePath: MODEL_BASE_PATH,
+    wasmPath: new URL('tfjs/', baseUrl).href,
+    modelBasePath: new URL('human/', baseUrl).href,
+    cacheModels: false,
     debug: false,
     face: {
       enabled: true,
@@ -50,17 +61,26 @@ function createHuman(): HumanInstance {
   return new HumanLibrary(config);
 }
 
-async function getHuman(): Promise<HumanInstance> {
+async function getHuman(assetBaseUrl: string): Promise<HumanInstance> {
   if (!humanPromise) {
+    humanAssetBaseUrl = assetBaseUrl;
     humanPromise = (async () => {
-      const human = createHuman();
+      const human = createHuman(assetBaseUrl);
       await human.tf.ready();
       await human.load();
+      const stats = human.models.stats();
+      if (stats.numLoadedModels !== stats.numDefinedModels) {
+        const failures = stats.modelStats.filter((model) => !model.loaded).map((model) => model.name);
+        throw new Error(`Human.js loaded ${stats.numLoadedModels}/${stats.numDefinedModels} models. Failed: ${failures.join(', ')}`);
+      }
       return human;
     })().catch((error: unknown) => {
       humanPromise = null;
+      humanAssetBaseUrl = null;
       throw error;
     });
+  } else if (humanAssetBaseUrl !== assetBaseUrl) {
+    throw new Error('Human.js was already initialized with a different asset origin.');
   }
   return humanPromise;
 }
@@ -94,14 +114,18 @@ async function detectSingleFace(human: HumanInstance, image: ArrayBuffer, label:
   }
 }
 
-async function withHuman<T>(work: (human: HumanInstance) => Promise<T>): Promise<T> {
-  const result = inferenceQueue.then(async () => work(await getHuman()));
+async function withHuman<T>(assetBaseUrl: string, work: (human: HumanInstance) => Promise<T>): Promise<T> {
+  const result = inferenceQueue.then(async () => work(await getHuman(assetBaseUrl)));
   inferenceQueue = result.then(() => undefined, () => undefined);
   return result;
 }
 
-export async function compareHumanFaces(idImage: ArrayBuffer, selfie: ArrayBuffer): Promise<HumanFaceComparison> {
-  return withHuman(async (human) => {
+export async function compareHumanFaces(
+  idImage: ArrayBuffer,
+  selfie: ArrayBuffer,
+  assetBaseUrl: string,
+): Promise<HumanFaceComparison> {
+  return withHuman(assetBaseUrl, async (human) => {
     let idFace: HumanFace;
     let selfieFace: HumanFace;
     try {
@@ -131,8 +155,9 @@ export async function findDuplicateHumanEmbedding(
   embedding: number[],
   stored: StoredEmbedding[],
   excludedArtisanId: number,
+  assetBaseUrl: string,
 ): Promise<{ artisanId: number; similarity: number } | null> {
-  return withHuman(async (human) => {
+  return withHuman(assetBaseUrl, async (human) => {
     let best: { artisanId: number; similarity: number } | null = null;
     for (const candidate of stored) {
       if (

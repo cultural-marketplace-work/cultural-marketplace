@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
       name?: string; email?: string; phone?: string; password?: string; password_confirmation?: string; terms?: boolean;
-      resend?: boolean;
+      preferred_language?: string; resend?: boolean;
     };
     const name = (body.name ?? '').trim();
     const email = (body.email ?? '').trim().toLowerCase();
@@ -28,7 +28,8 @@ export async function POST(req: Request) {
       const otp = pending.expires > Date.now() ? pending.otp : String(randomInt(100000, 1_000_000));
       if (pending.expires <= Date.now()) {
         await putPendingRegistration(email, {
-          name: pending.name, phone: pending.phone, password: pending.password, otp, ttlMinutes: 10,
+          name: pending.name, phone: pending.phone, password: pending.password, otp,
+          preferred_language: pending.preferred_language, ttlMinutes: 10,
         });
       }
       const { delivered } = await sendOtpEmail(email, otp);
@@ -40,6 +41,9 @@ export async function POST(req: Request) {
     if (!name || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^09\d{9}$/.test(phone)) {
       return NextResponse.json({ status: 'error', message: 'Enter your name, a valid email address, and an 11-digit mobile number starting with 09.' }, { status: 400 });
     }
+    if (body.preferred_language !== undefined && body.preferred_language !== 'en' && body.preferred_language !== 'ceb') {
+      return NextResponse.json({ status: 'error', message: 'Choose a supported language.' }, { status: 400 });
+    }
     if (await isEmailRegistered(email)) {
       return NextResponse.json({ status: 'error', message: 'This email already has a Cultural Marketplace account, so we did not send a code. Sign in or use a different email address.' }, { status: 409 });
     }
@@ -50,7 +54,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'error', message: 'Please agree to the Terms & Conditions and Privacy Policy.' }, { status: 400 });
     }
     const otp = String(randomInt(100000, 1_000_000));
-    await putPendingRegistration(email, { name, phone, password, otp, ttlMinutes: 10 });
+    await putPendingRegistration(email, {
+      name, phone, password, otp,
+      preferred_language: body.preferred_language === 'ceb' ? 'ceb' : 'en',
+      ttlMinutes: 10,
+    });
     const { delivered } = await sendOtpEmail(email, otp);
     if (!delivered) {
       await deletePendingRegistration(email);

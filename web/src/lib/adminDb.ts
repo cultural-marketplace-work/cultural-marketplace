@@ -1342,7 +1342,7 @@ export async function updateCustomerProfile(id: number, p: { name?: string; phon
   if (u) Object.assign(u, Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)));
 }
 
-export async function updateArtisanProfile(id: number, p: { name?: string; phone?: string; location?: string; bio?: string; business_name?: string; craft_type?: string; profile_picture?: string }): Promise<void> {
+export async function updateArtisanProfile(id: number, p: { name?: string; phone?: string; location?: string; bio?: string; business_name?: string; craft_type?: string; profile_picture?: string; preferred_language?: 'en' | 'ceb' }): Promise<void> {
   if (usingPg) {
     await sql`update artisans set
       name = coalesce(${p.name ?? null}, name),
@@ -1351,13 +1351,17 @@ export async function updateArtisanProfile(id: number, p: { name?: string; phone
       bio = coalesce(${p.bio ?? null}, bio),
       business_name = coalesce(${p.business_name ?? null}, business_name),
       craft_type = coalesce(${p.craft_type ?? null}, craft_type),
+      preferred_language = coalesce(${p.preferred_language ?? null}, preferred_language),
       profile_picture = coalesce(${p.profile_picture ?? null}, profile_picture)
       where id = ${id}`;
     invalidate('artisans*');
+    invalidate(`artisan:${id}`);
     return;
   }
   const a = store().artisans.find((x) => x.id === id);
   if (a) Object.assign(a, Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)));
+  invalidate('artisans*');
+  invalidate(`artisan:${id}`);
 }
 
 // ---------------------------------------------------------------------------
