@@ -1583,17 +1583,61 @@ export async function logActivity(entry: { userId?: number | null; role?: string
   });
 }
 
-export async function listActivityLogs(limit = 100): Promise<ActivityLog[]> {
+
+export interface ActivityLogDateFilter {
+  from?: string;
+  to?: string;
+}
+
+export async function listActivityLogs(
+  limit = 100,
+  filter?: ActivityLogDateFilter
+): Promise<ActivityLog[]> {
   if (usingPostgres) {
-    const rows = await sql`select * from activity_logs order by created_at desc limit ${limit}`;
+    const rows = filter?.from && filter?.to
+      ? await sql`
+          select *
+          from activity_logs
+          where created_at >= ${filter.from}::timestamptz
+            and created_at < ${filter.to}::timestamptz
+          order by created_at desc
+          limit ${limit}
+        `
+      : await sql`
+          select *
+          from activity_logs
+          order by created_at desc
+          limit ${limit}
+        `;
+
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
-      id: num(r.id), user_id: r.user_id == null ? null : num(r.user_id), user_role: String(r.user_role),
-      user_name: String(r.user_name), action: String(r.action), description: String(r.description),
+      id: num(r.id),
+      user_id: r.user_id == null ? null : num(r.user_id),
+      user_role: String(r.user_role ?? 'system'),
+      user_name: String(r.user_name ?? 'System'),
+      action: String(r.action ?? ''),
+      description: String(r.description ?? ''),
       created_at: tsString(r.created_at) ?? new Date().toISOString(),
     }));
   }
-  return [...store!.activity_logs].sort((a, b) => b.id - a.id).slice(0, limit);
+
+  let logs = [...store!.activity_logs];
+
+  if (filter?.from && filter?.to) {
+    const from = new Date(filter.from).getTime();
+    const to = new Date(filter.to).getTime();
+
+    logs = logs.filter((log) => {
+      const timestamp = new Date(log.created_at).getTime();
+      return timestamp >= from && timestamp < to;
+    });
+  }
+
+  return logs
+    .sort((a, b) => b.id - a.id)
+    .slice(0, limit);
 }
+
 
 // ---------------------------------------------------------------------------
 // Admin stats

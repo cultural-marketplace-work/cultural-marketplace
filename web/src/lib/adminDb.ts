@@ -409,14 +409,32 @@ export async function getArtisanFull(id: number): Promise<(Artisan & { id_number
   return a ? { ...a } : null;
 }
 
+
 export async function listAllArtisansAdmin(): Promise<Artisan[]> {
   syncFromCore();
+
   if (usingPg) {
-    const rows = await sql`select * from artisans where account_deleted_at is null order by created_at desc`;
-    return (rows as unknown as Record<string, unknown>[]).map((r) => ({ ...r, created_at: tsString(r.created_at) })) as unknown as Artisan[];
+    const rows = await sql`
+      select *
+      from artisans
+      where account_deleted_at is null
+      order by created_at desc
+    `;
+
+    return (
+      rows as unknown as Record<string, unknown>[]
+    ).map((r) => ({
+      ...r,
+      id: Number(r.id),
+      created_at: tsString(r.created_at),
+    })) as unknown as Artisan[];
   }
-  return store().artisans.filter((artisan) => !artisan.account_deleted_at);
+
+  return store().artisans.filter(
+    (artisan) => !artisan.account_deleted_at
+  );
 }
+
 
 export async function updateArtisan(id: number, p: { name?: string; email?: string; phone?: string; location?: string; craft_type?: string; business_name?: string; bio?: string }): Promise<void> {
   if (usingPg) {

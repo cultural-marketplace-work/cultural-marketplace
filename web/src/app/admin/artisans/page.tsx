@@ -15,7 +15,6 @@ export default async function AdminArtisansPage() {
 
   return (
     <div>
-      <h1 className="font-serif text-2xl font-bold text-brand-900">Artisan management</h1>
       <ArtisansClient initial={withProducts.map((a) => ({
         id: a.id,
         name: a.name,
