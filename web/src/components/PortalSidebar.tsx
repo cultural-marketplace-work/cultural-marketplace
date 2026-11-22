@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useArtisanLanguage } from '@/components/ArtisanLanguageProvider';
 import {
   Home,
   ReceiptText,
@@ -112,6 +113,7 @@ export default function PortalSidebar({
   roleTitle?: string;
 }) {
   const pathname = usePathname();
+  const { t } = useArtisanLanguage();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -138,6 +140,7 @@ export default function PortalSidebar({
     : portalLabel.toLowerCase().includes('artisan')
       ? 'Master Artisan'
       : 'Customer');
+  const translatedPortalLabel = t(portalLabel);
 
   const content = (
     <div className="flex h-full max-h-full min-h-0 flex-col overflow-hidden">
@@ -150,7 +153,7 @@ export default function PortalSidebar({
         >
           <img
             src="/images/cultural-marketplace-logo.png"
-            alt="Cultural Marketplace Logo"
+            alt={t('Cultural Marketplace Logo')}
             className="h-10 w-10 shrink-0 rounded-lg object-contain"
           />
 
@@ -162,7 +165,7 @@ export default function PortalSidebar({
             </span>
 
             <span className="mt-0.5 max-w-full text-[7px] font-bold leading-tight text-[#B00000]">
-              Agusan del Sur Indigenous Crafts and Experiences
+              {t('Agusan del Sur Indigenous Crafts and Experiences')}
             </span>
 
             <span className="mt-1 inline-block w-fit max-w-full truncate rounded-md border border-[#D6B56D] bg-[#FFF9EF] px-4 py-1 text-[9px] font-medium tracking-wide text-[#8B5A16]">
@@ -175,7 +178,7 @@ export default function PortalSidebar({
         <button
           type="button"
           className="shrink-0 rounded-lg p-1.5 text-[#4B4038] transition hover:bg-[#EAD9C3] hover:text-[#211B17] md:hidden"
-          aria-label="Close menu"
+          aria-label={t('Close menu')}
           onClick={() => setOpen(false)}
         >
           <X size={19} strokeWidth={1.8} />
@@ -186,12 +189,12 @@ export default function PortalSidebar({
       {/* NAVIGATION SECTIONS */}
       <nav
         className="my-3 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 text-xs font-medium [scrollbar-color:#B8A58F_transparent] [scrollbar-width:thin]"
-        aria-label={`${portalLabel} navigation`}
+        aria-label={`${translatedPortalLabel} ${t('navigation')}`}
       >
         {sections.map((section) => (
           <div key={section.title}>
             <p className="px-2.5 pb-1.5 font-sculpted text-[10px] font-bold uppercase tracking-wider text-[#8B0000]">
-              {section.title}
+              {t(section.title)}
             </p>
 
             <div className="flex flex-col gap-0.5">
@@ -215,10 +218,10 @@ export default function PortalSidebar({
                       key={item.href}
                       className={itemClass}
                       aria-disabled="true"
-                      title="Available after artisan verification"
+                      title={t('Available after artisan verification')}
                     >
                       {Icon && <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />}
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{t(item.label)}</span>
                     </span>
                   ) : (
                     <Link
@@ -230,7 +233,7 @@ export default function PortalSidebar({
                       onClick={() => setOpen(false)}
                     >
                       {Icon && <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />}
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{t(item.label)}</span>
                     </Link>
                   )
                 );
@@ -255,13 +258,13 @@ export default function PortalSidebar({
             strokeWidth={1.8}
             className="text-[#75695F]"
           />
-          <span>{backLabel}</span>
+          <span>{t(backLabel)}</span>
         </Link>
 
         {/* USER INFORMATION */}
         <div className="rounded-xl border border-[#DCC5A8] bg-white/70 p-2.5">
           <p className="text-[10px] font-bold uppercase tracking-wider text-[#8B0000]">
-            {roleTitle}
+            {t(roleTitle)}
           </p>
 
           <p className="mt-0.5 truncate text-xs font-bold text-[#211B17]">
@@ -275,7 +278,7 @@ export default function PortalSidebar({
             type="submit"
             className="w-full rounded-xl border border-[#D9A6A6] bg-[#FCEEEE] px-3 py-2 text-xs font-semibold text-[#8B0000] transition hover:bg-[#F5DADA] hover:text-[#650000]"
           >
-            Log out
+            {t('Log out')}
           </button>
         </form>
       </div>
@@ -302,7 +305,7 @@ export default function PortalSidebar({
               ) : (
                 <Menu size={18} strokeWidth={1.8} className="text-[#211B17]" />
               )}
-              <span>Menu</span>
+              <span>{t('Menu')}</span>
             </button>
 
             {/* MOBILE BRAND */}
@@ -317,7 +320,7 @@ export default function PortalSidebar({
               />
 
               <span className="truncate text-xs font-bold text-[#211B17]">
-                {portalLabel}
+                {translatedPortalLabel}
               </span>
             </Link>
           </div>
@@ -327,7 +330,7 @@ export default function PortalSidebar({
             href="/"
             className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs font-semibold text-[#8B0000] transition hover:underline"
           >
-            Storefront
+            {t('Storefront')}
             <ArrowRight size={13} className="text-[#8B0000]" />
           </Link>
         </div>

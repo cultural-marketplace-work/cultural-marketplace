@@ -145,6 +145,7 @@ export interface Artisan {
   id: number;
   name: string;
   email: string;
+  preferred_language?: 'en' | 'ceb';
   business_name: string | null;
   craft_type: string | null;
   location: string | null;

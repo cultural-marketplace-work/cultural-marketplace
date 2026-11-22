@@ -13,28 +13,23 @@ export default async function CustomerProfilePage() {
   const user = await getUser(session.id);
 
   return (
-    <main className="min-h-screen bg-[#FCF9F4]">
+    <main className="mx-auto max-w-7xl space-y-6 font-sans">
       <ProfileHeader
         name={user?.name || session.name}
         profilePicture={user?.profile_picture || null}
       />
 
-      {/* DIVIDER */}
-      <div className="h-px w-full bg-gray-300" />
-
-      <section className="px-4 py-5 md:px-8 md:py-6">
-        <div className="mx-auto max-w-2xl">
-          <ProfileForm
-            initial={{
-              name: user?.name || session.name,
-              email: user?.email || session.email,
-              phone: user?.phone || '',
-              location: user?.location || '',
-              bio: user?.bio || '',
-              profile_picture: user?.profile_picture || null,
-            }}
-          />
-        </div>
+      <section aria-label="Customer profile details" className="mx-auto w-full max-w-4xl">
+        <ProfileForm
+          initial={{
+            name: user?.name || session.name,
+            email: user?.email || session.email,
+            phone: user?.phone || '',
+            location: user?.location || '',
+            bio: user?.bio || '',
+            profile_picture: user?.profile_picture || null,
+          }}
+        />
       </section>
     </main>
   );

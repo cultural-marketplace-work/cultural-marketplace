@@ -40,7 +40,7 @@ interface DemoRow {
   activity_logs: ActivityLog[];
   shipments: import('./types').Shipment[];
   settings: Record<string, string>;
-  pending: Map<string, { name: string; phone: string; password: string; otp: string; expires: number; attempts: number }>;
+  pending: Map<string, { name: string; phone: string; password: string; otp: string; preferred_language: 'en' | 'ceb'; expires: number; attempts: number }>;
 }
 
 export { demo };
@@ -216,11 +216,11 @@ export async function createCustomer(input: { name: string; email: string; passw
 }
 
 export async function createUnverifiedArtisan(input: {
-  name: string; email: string; password: string; phone: string;
+  name: string; email: string; password: string; phone: string; preferred_language?: 'en' | 'ceb';
 }): Promise<number> {
   if (usingPostgres) {
-    const rows = await sql`insert into artisans (name, email, password, phone, verification_status, application_submitted)
-      values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, 'pending', false)
+    const rows = await sql`insert into artisans (name, email, password, phone, preferred_language, verification_status, application_submitted)
+      values (${input.name}, ${input.email}, ${input.password}, ${input.phone}, ${input.preferred_language ?? 'en'}, 'pending', false)
       returning id`;
     invalidate('artisans*');
     invalidate('admin:stats');
@@ -231,6 +231,7 @@ export async function createUnverifiedArtisan(input: {
   store!.artisans.push({
     id, name: input.name, email: input.email, password: input.password, phone: input.phone,
     location: null, craft_type: null, business_name: null, bio: null, profile_picture: null,
+    preferred_language: input.preferred_language ?? 'en',
     verification_status: 'pending', application_submitted: false,
   });
   invalidate('artisans*');
@@ -370,27 +371,37 @@ export async function appendArtisanRegistrationNote(id: number, note: string): P
 // ---------------------------------------------------------------------------
 // Pending registrations (OTP)
 // ---------------------------------------------------------------------------
-export async function putPendingRegistration(email: string, data: { name: string; phone: string; password: string; otp: string; ttlMinutes: number }): Promise<void> {
+export async function putPendingRegistration(email: string, data: { name: string; phone: string; password: string; otp: string; preferred_language?: 'en' | 'ceb'; ttlMinutes: number }): Promise<void> {
   const expires = Date.now() + data.ttlMinutes * 60_000;
+  const preferredLanguage = data.preferred_language ?? 'en';
   if (usingPostgres) {
-    await sql`insert into pending_registrations (email, name, phone, password, otp_code, otp_expires, attempts)
-      values (${email.toLowerCase()}, ${data.name}, ${data.phone}, ${data.password}, ${data.otp}, ${new Date(expires).toISOString()}, 0)
+    await sql`insert into pending_registrations (email, name, phone, password, otp_code, otp_expires, attempts, preferred_language)
+      values (${email.toLowerCase()}, ${data.name}, ${data.phone}, ${data.password}, ${data.otp}, ${new Date(expires).toISOString()}, 0, ${preferredLanguage})
       on conflict (email) do update set name = excluded.name, phone = excluded.phone,
-        password = excluded.password, otp_code = excluded.otp_code, otp_expires = excluded.otp_expires, attempts = 0`;
+        password = excluded.password, otp_code = excluded.otp_code, otp_expires = excluded.otp_expires,
+        attempts = 0, preferred_language = excluded.preferred_language`;
     return;
   }
-  store!.pending.set(email.toLowerCase(), { name: data.name, phone: data.phone, password: data.password, otp: data.otp, expires, attempts: 0 });
+  store!.pending.set(email.toLowerCase(), { name: data.name, phone: data.phone, password: data.password, otp: data.otp, preferred_language: preferredLanguage, expires, attempts: 0 });
 }
 
-export async function takePendingRegistration(email: string): Promise<{ name: string; phone: string; password: string; otp: string; expires: number } | null> {
+export async function takePendingRegistration(email: string): Promise<{ name: string; phone: string; password: string; otp: string; preferred_language: 'en' | 'ceb'; expires: number } | null> {
   if (usingPostgres) {
-    const rows = await sql`select name, phone, password, otp_code, otp_expires from pending_registrations where email = ${email.toLowerCase()} limit 1`;
+    const rows = await sql`select name, phone, password, otp_code, otp_expires, preferred_language from pending_registrations where email = ${email.toLowerCase()} limit 1`;
     if (!rows.length) return null;
     const r = rows[0] as Record<string, unknown>;
-    return { name: String(r.name), phone: String(r.phone), password: String(r.password), otp: String(r.otp_code), expires: new Date(String(r.otp_expires)).getTime() };
+    return { name: String(r.name), phone: String(r.phone), password: String(r.password), otp: String(r.otp_code), preferred_language: r.preferred_language === 'ceb' ? 'ceb' : 'en', expires: new Date(String(r.otp_expires)).getTime() };
   }
   const p = store!.pending.get(email.toLowerCase());
-  return p ? { name: p.name, phone: p.phone, password: p.password, otp: p.otp, expires: p.expires } : null;
+  return p ? { name: p.name, phone: p.phone, password: p.password, otp: p.otp, preferred_language: p.preferred_language, expires: p.expires } : null;
+}
+
+export async function listArtisanUiTranslations(language: 'en' | 'ceb'): Promise<Record<string, string>> {
+  if (language === 'en' || !usingPostgres) return {};
+  return cached(`artisan-ui-translations:${language}`, async () => {
+    const rows = await sql`select source_text, translated_text from artisan_ui_translations where language_code = ${language}`;
+    return Object.fromEntries(rows.map((row) => [String(row.source_text), String(row.translated_text)]));
+  }, 15 * 60_000);
 }
 
 export async function deletePendingRegistration(email: string): Promise<void> {
@@ -523,6 +534,7 @@ export async function listArtisanProducts(artisanId: number): Promise<Product[]>
 function mapArtisan(r: Record<string, unknown>): Artisan {
   return {
     id: num(r.id), name: String(r.name), email: String(r.email),
+    preferred_language: r.preferred_language === 'ceb' ? 'ceb' : 'en',
     business_name: (r.business_name as string) ?? null, craft_type: (r.craft_type as string) ?? null,
     location: (r.location as string) ?? null, bio: (r.bio as string) ?? null,
     profile_picture: (r.profile_picture as string) ?? null,
