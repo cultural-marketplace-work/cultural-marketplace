@@ -619,11 +619,10 @@ export async function deleteArtisan(id: number): Promise<DeleteAccountResult> {
             notes = null
         where artisan_id = ${id}`;
       await tx`
-        update order_items
-        set product_name = 'Deleted artisan product',
-            review_comment = null,
-            proof_of_receipt = null
-        where artisan_id = ${id}`;
+  update order_items
+  set review_comment = null,
+      proof_of_receipt = null
+  where artisan_id = ${id}`;
       await tx`
         update reports
         set reason = 'Report details removed after artisan account deletion'
@@ -871,8 +870,10 @@ export async function deleteArtisan(id: number): Promise<DeleteAccountResult> {
 // ---------------------------------------------------------------------------
 // Bookings (workshop/experience order items)
 // ---------------------------------------------------------------------------
+
 export async function listBookings(artisanId?: number): Promise<ExperienceBooking[]> {
   syncFromCore();
+
   if (usingPg) {
     const rows = await sql`
       select oi.id as order_item_id, oi.order_id, oi.product_id, oi.artisan_id, oi.product_name,
@@ -883,35 +884,72 @@ export async function listBookings(artisanId?: number): Promise<ExperienceBookin
       from order_items oi
       join orders o on o.id = oi.order_id
       join users u on u.id = o.customer_id
+      join products p on p.id = oi.product_id
+      join artisans a on a.id = oi.artisan_id
       where oi.purchase_type <> 'product'
+        and p.name <> 'Deleted artisan product'
+        and a.account_deleted_at is null
         ${artisanId ? sql`and oi.artisan_id = ${artisanId}` : sql``}
       order by oi.id desc limit 200`;
+
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
-      order_item_id: n(r.order_item_id), order_id: n(r.order_id), product_id: n(r.product_id),
-      customer_id: n(r.customer_id), customer_name: String(r.customer_name),
+      order_item_id: n(r.order_item_id),
+      order_id: n(r.order_id),
+      product_id: n(r.product_id),
+      customer_id: n(r.customer_id),
+      customer_name: String(r.customer_name),
       customer_phone: (r.customer_phone as string) ?? null,
-      id: n(r.product_id), product_name: String(r.product_name),
-      attendee_name: (r.attendee_name as string) ?? null, attendee_contact: (r.attendee_contact as string) ?? null,
+      id: n(r.product_id),
+      product_name: String(r.product_name),
+      attendee_name: (r.attendee_name as string) ?? null,
+      attendee_contact: (r.attendee_contact as string) ?? null,
       attendee_for: (r.attendee_for as string) ?? null,
       selected_session: (r.selected_session as ExperienceBooking['selected_session']) ?? null,
       selected_variant: (r.selected_variant as string) ?? null,
       purchase_type: (r.purchase_type as string) ?? 'workshop',
       order_notes: (r.order_notes as string) ?? null,
       payment_method: (r.payment_method as string) ?? null,
-      quantity: n(r.quantity), price: n(r.price), status: String(r.status), ticket_code: (r.ticket_code as string) ?? null,
+      quantity: n(r.quantity),
+      price: n(r.price),
+      status: String(r.status),
+      ticket_code: (r.ticket_code as string) ?? null,
     }));
   }
+
   const s = store();
+
   return s.order_items
-    .filter((x) => x.purchase_type !== 'product' && (!artisanId || x.artisan_id === artisanId))
+    .filter((x) => {
+      if (x.purchase_type === 'product') return false;
+      if (artisanId && x.artisan_id !== artisanId) return false;
+
+      const product = s.products.find((p) => p.id === x.product_id);
+      const artisan = s.artisans.find((a) => a.id === x.artisan_id);
+
+      const productData = product as unknown as Record<string, unknown> | undefined;
+      const artisanData = artisan as unknown as Record<string, unknown> | undefined;
+
+      return (
+        !!product &&
+        productData?.name !== 'Deleted artisan product' &&
+        !!artisan &&
+        !artisanData?.account_deleted_at
+      );
+    })
     .map((x) => {
       const o = s.orders.find((oo) => oo.id === x.order_id);
       const cust = s.users.find((u) => u.id === o?.customer_id);
+
       return {
-        id: x.product_id, order_item_id: x.id, order_id: x.order_id, product_id: x.product_id,
-        customer_id: o?.customer_id ?? 0, customer_name: cust?.name ?? 'Customer',
+        id: x.product_id,
+        order_item_id: x.id,
+        order_id: x.order_id,
+        product_id: x.product_id,
+        customer_id: o?.customer_id ?? 0,
+        customer_name: cust?.name ?? 'Customer',
         customer_phone: cust?.phone ?? null,
-        product_name: x.product_name, attendee_name: x.attendee_name,
+        product_name: x.product_name,
+        attendee_name: x.attendee_name,
         attendee_contact: (x as unknown as { attendee_contact?: string }).attendee_contact ?? cust?.phone ?? null,
         attendee_for: (x as unknown as { attendee_for?: string }).attendee_for ?? null,
         selected_session: x.selected_session as ExperienceBooking['selected_session'],
@@ -919,11 +957,107 @@ export async function listBookings(artisanId?: number): Promise<ExperienceBookin
         purchase_type: x.purchase_type,
         order_notes: o?.notes ?? null,
         payment_method: o?.payment_method ?? null,
-        quantity: x.quantity, price: n(x.price), status: x.status, ticket_code: x.ticket_code,
+        quantity: x.quantity,
+        price: n(x.price),
+        status: x.status,
+        ticket_code: x.ticket_code,
       };
     })
     .sort((a, b) => b.order_item_id - a.order_item_id);
 }
+
+
+export async function listAllBookingHistory(): Promise<ExperienceBooking[]> {
+  syncFromCore();
+
+  if (usingPg) {
+    const rows = await sql`
+      select
+        oi.id as order_item_id,
+        oi.order_id,
+        oi.product_id,
+        oi.artisan_id,
+        oi.product_name,
+        oi.attendee_name,
+        oi.attendee_contact,
+        oi.attendee_for,
+        oi.selected_session,
+        oi.quantity,
+        oi.price,
+        oi.status,
+        oi.ticket_code,
+        oi.selected_variant,
+        oi.purchase_type,
+        o.customer_id,
+        u.name as customer_name,
+        u.phone as customer_phone,
+        o.notes as order_notes,
+        o.payment_method
+      from order_items oi
+      join orders o on o.id = oi.order_id
+      join users u on u.id = o.customer_id
+      where oi.purchase_type <> 'product'
+      order by oi.id desc
+    `;
+
+    return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+      order_item_id: n(r.order_item_id),
+      order_id: n(r.order_id),
+      product_id: n(r.product_id),
+      customer_id: n(r.customer_id),
+      customer_name: String(r.customer_name),
+      customer_phone: (r.customer_phone as string) ?? null,
+      id: n(r.product_id),
+      product_name: String(r.product_name),
+      attendee_name: (r.attendee_name as string) ?? null,
+      attendee_contact: (r.attendee_contact as string) ?? null,
+      attendee_for: (r.attendee_for as string) ?? null,
+      selected_session: (r.selected_session as ExperienceBooking['selected_session']) ?? null,
+      selected_variant: (r.selected_variant as string) ?? null,
+      purchase_type: (r.purchase_type as string) ?? 'workshop',
+      order_notes: (r.order_notes as string) ?? null,
+      payment_method: (r.payment_method as string) ?? null,
+      quantity: n(r.quantity),
+      price: n(r.price),
+      status: String(r.status),
+      ticket_code: (r.ticket_code as string) ?? null,
+    }));
+  }
+
+  const s = store();
+
+  return s.order_items
+    .filter((x) => x.purchase_type !== 'product')
+    .map((x) => {
+      const o = s.orders.find((oo) => oo.id === x.order_id);
+      const cust = s.users.find((u) => u.id === o?.customer_id);
+
+      return {
+        id: x.product_id,
+        order_item_id: x.id,
+        order_id: x.order_id,
+        product_id: x.product_id,
+        customer_id: o?.customer_id ?? 0,
+        customer_name: cust?.name ?? 'Customer',
+        customer_phone: cust?.phone ?? null,
+        product_name: x.product_name,
+        attendee_name: x.attendee_name,
+        attendee_contact: (x as unknown as { attendee_contact?: string }).attendee_contact ?? cust?.phone ?? null,
+        attendee_for: (x as unknown as { attendee_for?: string }).attendee_for ?? null,
+        selected_session: x.selected_session as ExperienceBooking['selected_session'],
+        selected_variant: (x as unknown as { selected_variant?: string }).selected_variant ?? null,
+        purchase_type: x.purchase_type,
+        order_notes: o?.notes ?? null,
+        payment_method: o?.payment_method ?? null,
+        quantity: x.quantity,
+        price: n(x.price),
+        status: x.status,
+        ticket_code: x.ticket_code,
+      };
+    })
+    .sort((a, b) => b.order_item_id - a.order_item_id);
+}
+
 
 export async function updateBookingStatus(orderItemId: number, status: string): Promise<void> {
   if (usingPg) {

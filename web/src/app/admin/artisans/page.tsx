@@ -52,5 +52,6 @@ export default async function AdminArtisansPage() {
         productCount: a.productCount,
       }))} />
     </div>
+    </div>
   );
 }

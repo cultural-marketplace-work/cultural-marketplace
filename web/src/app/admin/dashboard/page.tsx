@@ -9,6 +9,7 @@ import {
 import MiniChart from '@/components/MiniChart';
 import AxisChart from '@/components/charts/AxisChart';
 import DonutChart from '@/components/charts/DonutChart';
+import { LayoutDashboard } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -378,41 +379,111 @@ async function ActivityPanel() {
 
 export default function AdminDashboard() {
   return (
-    <div>
-      <h1 className="font-serif text-2xl font-bold text-brand-900">Platform overview</h1>
-      <p className="mt-1 text-sm text-stone-500">What needs your attention, and how the marketplace is doing.</p>
+    <div className="mx-auto w-full max-w-6xl font-sans">
+      {/* DASHBOARD HEADER */}
+      <header className="relative isolate overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#4b1717] via-[#7f2422] to-[#9E2A2B] px-6 py-7 text-white shadow-lg sm:px-9 sm:py-9">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 opacity-[0.12]"
+          style={{
+            backgroundImage: "url('/images/kalinga-weave.svg')",
+            backgroundSize: '240px',
+          }}
+        />
 
+        <div
+          aria-hidden="true"
+          className="absolute -right-20 -top-32 -z-10 h-80 w-80 rounded-full border border-white/10"
+        />
+
+        <div className="relative flex flex-wrap items-end justify-between gap-5">
+          <div className="max-w-2xl">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-ochre-200">
+              <LayoutDashboard size={15} aria-hidden="true" />
+              Administration
+            </p>
+
+            <h1 className="mt-3 font-serif text-3xl font-bold leading-tight sm:text-4xl">
+              Platform Overview
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-white/75 sm:text-base">
+              Monitor marketplace performance, review important activities,
+              and keep track of your platform operations.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-semibold text-ochre-100">
+            Dashboard Analytics
+          </div>
+        </div>
+      </header>
+
+      {/* DASHBOARD CONTENT */}
       <div className="mt-6">
-        <Suspense fallback={<Skeleton className="h-14" />}><AttentionSection /></Suspense>
+        <Suspense fallback={<Skeleton className="h-14" />}>
+          <AttentionSection />
+        </Suspense>
       </div>
 
       <div className="mt-6">
-        <Suspense fallback={<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44" />)}</div>}>
+        <Suspense
+          fallback={
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-44" />
+              ))}
+            </div>
+          }
+        >
           <KpiSection />
         </Suspense>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Suspense fallback={<Skeleton className="h-80" />}><RevenueChartPanel /></Suspense>
+          <Suspense fallback={<Skeleton className="h-80" />}>
+            <RevenueChartPanel />
+          </Suspense>
         </div>
-        <Suspense fallback={<Skeleton className="h-80" />}><StatusPanel /></Suspense>
+
+        <Suspense fallback={<Skeleton className="h-80" />}>
+          <StatusPanel />
+        </Suspense>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <Suspense fallback={<Skeleton className="h-80" />}><OrdersPerDayPanel /></Suspense>
-        <Suspense fallback={<Skeleton className="h-80" />}><SignupsPanel /></Suspense>
+        <Suspense fallback={<Skeleton className="h-80" />}>
+          <OrdersPerDayPanel />
+        </Suspense>
+
+        <Suspense fallback={<Skeleton className="h-80" />}>
+          <SignupsPanel />
+        </Suspense>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <Suspense fallback={<Skeleton className="h-72" />}><CategoryPanel /></Suspense>
-        <Suspense fallback={<Skeleton className="h-72" />}><PaymentPanel /></Suspense>
-        <Suspense fallback={<Skeleton className="h-72" />}><TopProductsPanel /></Suspense>
+        <Suspense fallback={<Skeleton className="h-72" />}>
+          <CategoryPanel />
+        </Suspense>
+
+        <Suspense fallback={<Skeleton className="h-72" />}>
+          <PaymentPanel />
+        </Suspense>
+
+        <Suspense fallback={<Skeleton className="h-72" />}>
+          <TopProductsPanel />
+        </Suspense>
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <Suspense fallback={<Skeleton className="h-64" />}><RecentOrdersPanel /></Suspense>
-        <Suspense fallback={<Skeleton className="h-64" />}><ActivityPanel /></Suspense>
+        <Suspense fallback={<Skeleton className="h-64" />}>
+          <RecentOrdersPanel />
+        </Suspense>
+
+        <Suspense fallback={<Skeleton className="h-64" />}>
+          <ActivityPanel />
+        </Suspense>
       </div>
     </div>
   );

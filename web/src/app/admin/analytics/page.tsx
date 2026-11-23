@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { getAdminAnalytics } from '@/lib/analytics';
 import BarList from '@/components/BarList';
+import { ChartNoAxesCombined } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -133,14 +134,45 @@ export default async function AdminAnalyticsPage() {
   ];
 
   return (
-    <main className="min-w-0 w-full">
-      <h1 className="break-words font-serif text-xl font-bold text-brand-900 sm:text-2xl">
-        Analytics &amp; demographics
-      </h1>
+  <main className="mx-auto min-w-0 w-full max-w-6xl font-sans">
+    {/* PAGE HEADER */}
+    <header className="relative isolate overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#4b1717] via-[#7f2422] to-[#9E2A2B] px-6 py-7 text-white shadow-lg sm:px-9 sm:py-9">
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 -z-10 opacity-[0.12]"
+        style={{
+          backgroundImage: "url('/images/kalinga-weave.svg')",
+          backgroundSize: '240px',
+        }}
+      />
 
-      <p className="mt-1 max-w-2xl text-sm leading-relaxed text-stone-500">
-        Who uses the marketplace, what sells, and where the gaps are.
-      </p>
+      <div
+        aria-hidden="true"
+        className="absolute -right-20 -top-32 -z-10 h-80 w-80 rounded-full border border-white/10"
+      />
+
+      <div className="relative flex flex-wrap items-end justify-between gap-5">
+        <div className="max-w-2xl">
+          <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-ochre-200">
+            <ChartNoAxesCombined size={15} aria-hidden="true" />
+            Marketplace insights
+          </p>
+
+          <h1 className="mt-3 break-words font-serif text-3xl font-bold leading-tight sm:text-4xl">
+            Analytics &amp; demographics
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-white/75 sm:text-base">
+            Understand marketplace activity, customer demographics, artisan
+            growth, product performance, and sales trends.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-semibold text-ochre-100">
+          12-week platform insights
+        </div>
+      </div>
+    </header>
 
       {/* KPI cards */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 lg:grid-cols-3">

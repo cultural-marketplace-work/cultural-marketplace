@@ -66,15 +66,6 @@ export default async function AdminProductsPage() {
 
   return (
     <div>
-      <div className="border-b border-gray-300 pb-4">
-        <h1 className="font-serif text-2xl font-bold text-[#3D3028]">
-          Craft Listings
-        </h1>
-        <p className="mt-1 text-sm text-[#71675F]">
-          Review, edit and manage every product listed by artisans.
-        </p>
-      </div>
-
       <AdminProductsClient initial={products} />
     </div>
   );

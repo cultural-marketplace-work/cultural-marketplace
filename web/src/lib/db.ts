@@ -1387,26 +1387,76 @@ export async function listAllOrders(): Promise<Order[]> {
   return [...store!.orders].sort((a, b) => b.id - a.id);
 }
 
-export async function listAllOrdersWithItems(): Promise<Array<{ order: Order; items: OrderItem[] }>> {
+
+export async function listAllOrdersWithItems(): Promise<
+  Array<{ order: Order; items: OrderItem[]; customer_name: string | null }>
+> {
   if (usingPostgres) {
     const rows = await sql`
-      select o.*,
-        coalesce(jsonb_agg(to_jsonb(oi.*) order by oi.id) filter (where oi.id is not null), '[]'::jsonb) as items
+      select
+        o.*,
+        u.name as customer_name,
+        coalesce(oi.items, '[]'::jsonb) as items
       from orders o
-      left join order_items oi on oi.order_id = o.id
-      group by o.id
-      order by o.created_at desc limit 200`;
+      left join users u on u.id = o.customer_id
+      left join lateral (
+        select jsonb_agg(to_jsonb(oi.*) order by oi.id) as items
+        from order_items oi
+        inner join products p on p.id = oi.product_id
+        inner join artisans a on a.id = oi.artisan_id
+        where oi.order_id = o.id
+          and p.name <> 'Deleted artisan product'
+          and a.account_deleted_at is null
+      ) oi on true
+      where oi.items is not null
+      order by o.created_at desc
+      limit 200
+    `;
+
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
       order: mapOrder(r),
-      items: ((r.items as unknown as Record<string, unknown>[]) || []).map(mapOrderItem),
+      customer_name: (r.customer_name as string) ?? null,
+      items: ((r.items as unknown as Record<string, unknown>[]) || [])
+        .map(mapOrderItem),
     }));
   }
+
   const orders = [...store!.orders].sort((a, b) => b.id - a.id);
-  return orders.map((o) => ({
-    order: { ...o },
-    items: store!.order_items.filter((oi) => oi.order_id === o.id).map((oi) => ({ ...oi })),
-  }));
+
+  return orders
+    .map((o) => {
+      const customer = store!.users.find((u) => u.id === o.customer_id);
+
+      const items = store!.order_items
+        .filter((oi) => {
+          if (oi.order_id !== o.id) return false;
+
+          const product = store!.products.find(
+            (p) => p.id === oi.product_id
+          );
+
+          const artisan = store!.artisans.find(
+            (a) => a.id === oi.artisan_id
+          );
+
+          return (
+            product &&
+            product.name !== 'Deleted artisan product' &&
+            artisan &&
+            !artisan.account_deleted_at
+          );
+        })
+        .map((oi) => ({ ...oi }));
+
+      return {
+        order: { ...o },
+        customer_name: customer?.name ?? null,
+        items,
+      };
+    })
+    .filter((row) => row.items.length > 0);
 }
+
 
 // ---------------------------------------------------------------------------
 // Notifications

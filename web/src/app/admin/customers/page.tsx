@@ -1,4 +1,4 @@
-
+﻿
 import { listCustomers } from '@/lib/db';
 import CustomersClient from './CustomersClient';
 import { UsersRound } from 'lucide-react';
@@ -34,15 +34,7 @@ export default async function AdminCustomersPage() {
         </div>
       </header>
     <div className="min-w-0">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-sculpted text-2xl font-bold text-charcoal-900">
-          Customer Management
-        </h1>
-        <p className="text-sm text-stone-500">
-          Manage customer accounts, review their order activity, and maintain
-          customer information.
-        </p>
-      </div>
+
 
       <CustomersClient
   initial={customers.map((c) => ({
@@ -55,7 +47,8 @@ export default async function AdminCustomersPage() {
     order_count: c.order_count,
     status: c.status,
   }))}
-/>
+      />
+    </div>
     </div>
   );
 }

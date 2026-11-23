@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { updateShipmentStatus, getShipmentById } from '@/lib/shipments';
@@ -5,8 +6,6 @@ import { pushNotification } from '@/lib/db';
 import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import type { ShipmentStatus } from '@/lib/types';
 
-// Status transitions: artisan advances their own parcels; admin may also cancel
-// (exception path). Customer is notified on every movement.
 const STATUS_MESSAGE: Record<ShipmentStatus, (t: string) => string> = {
   created: (t) => `Shipment label created for your order. Tracking: ${t} (J&T Express).`,
   dropped_off: (t) => `Your parcel was dropped off at J&T Express. Tracking: ${t}.`,
@@ -17,50 +16,112 @@ const STATUS_MESSAGE: Record<ShipmentStatus, (t: string) => string> = {
 
 const VALID: ShipmentStatus[] = ['dropped_off', 'in_transit', 'delivered', 'cancelled'];
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const session = await getSession();
+
   if (!session || (session.role !== 'artisan' && session.role !== 'admin')) {
-    return NextResponse.json({ status: 'error', message: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json(
+      { status: 'error', message: 'Unauthorized' },
+      { status: 401 }
+    );
   }
+
   if (session.role === 'artisan' && !await getVerifiedArtisanSession()) {
-    return NextResponse.json({ status: 'error', message: 'Artisan verification is required to manage shipments.' }, { status: 403 });
+    return NextResponse.json(
+      { status: 'error', message: 'Artisan verification is required to manage shipments.' },
+      { status: 403 }
+    );
   }
+
   const { id } = await params;
   const shipmentId = Number(id);
+
+  if (!Number.isInteger(shipmentId) || shipmentId <= 0) {
+    return NextResponse.json(
+      { status: 'error', message: 'Invalid shipment ID.' },
+      { status: 400 }
+    );
+  }
+
   try {
     const body = (await req.json()) as { status?: string };
     const next = body.status as ShipmentStatus;
+
     if (!VALID.includes(next)) {
-      return NextResponse.json({ status: 'error', message: 'Invalid status.' }, { status: 400 });
+      return NextResponse.json(
+        { status: 'error', message: 'Invalid status.' },
+        { status: 400 }
+      );
     }
 
     const shipment = await getShipmentById(shipmentId);
-    if (!shipment) return NextResponse.json({ status: 'error', message: 'Shipment not found.' }, { status: 404 });
 
-    // Artisans may only advance their own parcels; cancel is admin-only.
+    if (!shipment) {
+      return NextResponse.json(
+        { status: 'error', message: 'Shipment not found.' },
+        { status: 404 }
+      );
+    }
+
+    // Permanently lock delivered shipments, including for admins.
+    if (shipment.status === 'delivered') {
+      return NextResponse.json(
+        {
+          status: 'error',
+          message: 'This shipment has already been delivered and can no longer be modified.',
+        },
+        { status: 409 }
+      );
+    }
+
+    // Artisans may only advance their own parcels; cancellation is admin-only.
     if (session.role === 'artisan') {
       if (shipment.artisan_id !== session.id) {
-        return NextResponse.json({ status: 'error', message: 'This shipment belongs to another artisan.' }, { status: 403 });
+        return NextResponse.json(
+          { status: 'error', message: 'This shipment belongs to another artisan.' },
+          { status: 403 }
+        );
       }
+
       if (next === 'cancelled') {
-        return NextResponse.json({ status: 'error', message: 'Only an admin can cancel a shipment. Contact support.' }, { status: 403 });
+        return NextResponse.json(
+          { status: 'error', message: 'Only an admin can cancel a shipment. Contact support.' },
+          { status: 403 }
+        );
       }
     }
 
     const updated = await updateShipmentStatus(shipmentId, next, session.role);
-    if (!updated) return NextResponse.json({ status: 'error', message: 'Shipment not found.' }, { status: 404 });
+
+    if (!updated) {
+      return NextResponse.json(
+        { status: 'error', message: 'Shipment not found.' },
+        { status: 404 }
+      );
+    }
 
     await pushNotification({
-      userId: shipment.customer_id, role: 'customer', type: `shipment_${next}`,
+      userId: shipment.customer_id,
+      role: 'customer',
+      type: `shipment_${next}`,
       message: STATUS_MESSAGE[next](shipment.tracking_number),
-      data: { order_id: shipment.order_id, tracking_number: shipment.tracking_number },
+      data: {
+        order_id: shipment.order_id,
+        tracking_number: shipment.tracking_number,
+      },
     });
 
     return NextResponse.json({ status: 'success', shipment: updated });
   } catch (e) {
     return NextResponse.json(
-      { status: 'error', message: e instanceof Error ? e.message : 'Update failed.' },
-      { status: 400 },
+      {
+        status: 'error',
+        message: e instanceof Error ? e.message : 'Update failed.',
+      },
+      { status: 400 }
     );
   }
 }
