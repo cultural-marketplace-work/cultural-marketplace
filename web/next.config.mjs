@@ -13,6 +13,8 @@ const humanWasmEntry = path.join(
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingRoot: projectDirectory,
+
   images: { remotePatterns: [{ protocol: 'https', hostname: '**' }] },
   // nsfwjs/tfjs use dynamic requires internally that webpack can't statically
   // analyse — load them from node_modules at runtime instead of bundling.
@@ -24,10 +26,12 @@ const nextConfig = {
     'sharp',
     '@xenova/transformers',
   ],
+    outputFileTracingRoot: path.join(projectDirectory, '..'),
+
   turbopack: {
-    root: projectDirectory,
+    root: path.join(projectDirectory, '..'),
     resolveAlias: {
-      '@vladmandic/human': './node_modules/@vladmandic/human/dist/human.node-wasm.js',
+      '@vladmandic/human': './web/node_modules/@vladmandic/human/dist/human.node-wasm.js',
     },
   },
   webpack(config, { isServer }) {

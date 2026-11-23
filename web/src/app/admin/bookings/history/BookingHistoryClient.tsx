@@ -108,7 +108,7 @@ export default function BookingHistoryClient({
             <>
               Showing <strong className="text-stone-800">{filteredBookings.length}</strong> of{' '}
               <strong className="text-stone-800">{bookings.length}</strong> records
-              for "{searchQuery}"
+              for &quot;{searchQuery}&quot;
             </>
           ) : (
             <>

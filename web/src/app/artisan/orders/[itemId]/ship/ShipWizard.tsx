@@ -145,7 +145,7 @@ export default function ShipWizard({ orderItemId, item, shippingAddress, custome
       {step === 1 && (
         <section className="card mt-6 space-y-3 p-6">
           <h2 className="font-serif text-lg font-bold text-brand-900">Recipient information</h2>
-          <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500">From the customer's order — if something looks wrong, message the customer instead of editing.</p>
+          <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500">From the customer&apos;s order — if something looks wrong, message the customer instead of editing.</p>
           <div className="rounded-xl border border-stone-200 p-4">
             <p className="font-semibold text-stone-800">{customerName}</p>
             <p className="mt-1 whitespace-pre-line text-sm text-stone-600">{shippingAddress}</p>

@@ -167,7 +167,7 @@ export async function getUser(id: number): Promise<(SessionUser & { phone?: stri
     };
   }
   const u = store!.users.find((x) => x.id === id && x.role !== 'artisan' && !x.account_deleted_at);
-  return u ? { ...u, phone: u.phone ?? null, location: u.location ?? null, bio: (u as any).bio ?? null } : null;
+  return u ? { ...u, phone: u.phone ?? null, location: u.location ?? null, bio: u.bio ?? null } : null;
 }
 
 export async function updateAdminProfile(id: number, p: { name?: string; phone?: string }): Promise<void> {

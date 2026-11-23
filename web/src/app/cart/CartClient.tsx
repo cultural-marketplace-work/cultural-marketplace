@@ -22,6 +22,28 @@ export interface CartRow {
 // Last removed row, kept in memory so Undo can restore it without re-fetching.
 let lastRemoved: CartRow | null = null;
 
+type CartApiItem = {
+  id: number;
+  product_id: number;
+  quantity: number;
+  purchase_type: string;
+  selected_variant?: string | null;
+  selected_session?: object | null;
+  attendee_name?: string | null;
+  attendee_for?: string | null;
+  product?: {
+    name?: string | null;
+    price?: number | string | null;
+    tutorial_price?: number | string | null;
+    image_path?: string | null;
+    variations_data?: Array<{
+      typeLabel: string;
+      name: string;
+      price?: number | string | null;
+    }> | null;
+  } | null;
+};
+
 export default function CartClient({ initialItems }: { initialItems: CartRow[] }) {
   const router = useRouter();
   const [items, setItems] = useState<CartRow[]>(initialItems);
@@ -34,17 +56,23 @@ export default function CartClient({ initialItems }: { initialItems: CartRow[] }
   useEffect(() => {
     let mounted = true;
     async function syncCart() {
-      try {
-        const res = await fetch('/api/cart');
-        const data = await res.json();
-        if (mounted && data.status === 'success' && Array.isArray(data.cart)) {
-          const mapped: CartRow[] = data.cart.map((i: any) => {
+  try {
+    const res = await fetch('/api/cart');
+    const data = await res.json() as {
+      status?: string;
+      cart?: CartApiItem[];
+    };
+
+    if (mounted && data.status === 'success' && Array.isArray(data.cart)) {
+      const mapped: CartRow[] = data.cart.map((i: CartApiItem) => {
             let itemPrice = Number(i.product?.price ?? 0);
             if (i.purchase_type === 'workshop') {
               itemPrice = Number(i.product?.tutorial_price ?? i.product?.price ?? 0);
             } else if (i.selected_variant && i.product?.variations_data) {
-              const v = i.product.variations_data.find((x: any) => `${x.typeLabel}: ${x.name}` === i.selected_variant);
-              if (v && v.price > 0) itemPrice += Number(v.price);
+              const v = i.product.variations_data.find(
+  (x) => `${x.typeLabel}: ${x.name}` === i.selected_variant
+);
+if (v && Number(v.price) > 0) itemPrice += Number(v.price);
             }
             return {
               id: i.id,
@@ -52,7 +80,7 @@ export default function CartClient({ initialItems }: { initialItems: CartRow[] }
               quantity: i.quantity,
               name: i.product?.name ?? 'Unknown product',
               price: itemPrice,
-              variant: i.selected_variant,
+              variant: i.selected_variant ?? null,
               purchase_type: i.purchase_type,
               session: i.selected_session,
               image_path: i.product?.image_path ?? null,

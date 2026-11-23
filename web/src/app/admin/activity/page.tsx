@@ -302,7 +302,7 @@ export default async function AdminActivityPage({
               href="/admin/activity"
               className="mt-3 block text-center text-xs font-medium text-stone-500 hover:text-brand-700"
             >
-              Back to today's activity
+              Back to today&apos;s activity
             </a>
           </div>
         </details>

@@ -568,7 +568,7 @@ export async function deleteArtisanApplication(id: number): Promise<DeleteApplic
 
 export async function deleteArtisan(id: number): Promise<DeleteAccountResult> {
   syncFromCore();
-  let mediaPaths: string[] = [];
+  const mediaPaths: string[] = [];
   if (usingPg) {
     const deleted = await sql.begin(async (tx) => {
       const artisanRows = await tx`select * from artisans where id = ${id} and account_deleted_at is null for update`;

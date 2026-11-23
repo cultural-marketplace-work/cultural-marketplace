@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     const { invalidate } = await import('@/lib/cache');
 
     // Fetch fresh database state directly to prevent stale cached image_path from overwriting main image
-    let currentRows = usingPg
+    const currentRows = usingPg
       ? await sql`select image_path, product_gallery from products where id = ${productId}`
       : [{ image_path: product.image_path, product_gallery: product.product_gallery }];
 
@@ -163,7 +163,7 @@ export async function DELETE(req: Request) {
   const { sql, usingPg } = await import('@/lib/dbPg');
   const { invalidate } = await import('@/lib/cache');
 
-  let currentRows = usingPg
+  const currentRows = usingPg
     ? await sql`select image_path, product_gallery from products where id = ${productId}`
     : [{ image_path: product.image_path, product_gallery: product.product_gallery }];
 
