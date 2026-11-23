@@ -247,6 +247,11 @@ export interface ChatMessage {
   conversation_id: number;
   sender_role: 'customer' | 'artisan';
   message: string;
+  product_id: number | null;
+  product_name: string | null;
+  reply_to_message_id: number | null;
+  reply_to_message: string | null;
+  reply_to_sender_role: 'customer' | 'artisan' | null;
   read_at: string | null;
   created_at: string;
 }

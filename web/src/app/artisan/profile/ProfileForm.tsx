@@ -22,7 +22,7 @@ const inputClass = 'input !rounded-xl !py-2.5';
 
 export default function ProfileForm({ initial }: { initial: ArtisanProfileInitialData }) {
   const router = useRouter();
-  const { t } = useArtisanLanguage();
+  const { t, setLanguage: setPortalLanguage } = useArtisanLanguage();
 
   const [form, setForm] = useState({
     name: initial.name ?? '',
@@ -35,10 +35,43 @@ export default function ProfileForm({ initial }: { initial: ArtisanProfileInitia
   });
 
   const [busy, setBusy] = useState(false);
+  const [languageBusy, setLanguageBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function changeLanguage(language: 'en' | 'ceb') {
+    const previousLanguage = form.preferred_language;
+    set('preferred_language', language);
+    setPortalLanguage(language);
+    setLanguageBusy(true);
+    setMsg(null);
+    try {
+      const response = await fetch('/api/artisan/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferred_language: language }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || t('Save failed.'));
+      }
+      setMsg({
+        text: language === 'ceb' ? 'Na-update ang pinulongang gusto nimong gamiton.' : 'Language preference updated.',
+      });
+      router.refresh();
+    } catch (error) {
+      set('preferred_language', previousLanguage);
+      setPortalLanguage(previousLanguage);
+      setMsg({
+        text: error instanceof Error ? error.message : t('Save failed.'),
+        error: true,
+      });
+    } finally {
+      setLanguageBusy(false);
+    }
   }
 
   async function save() {
@@ -77,12 +110,15 @@ export default function ProfileForm({ initial }: { initial: ArtisanProfileInitia
             id="ap-language"
             className={inputClass}
             value={form.preferred_language}
-            onChange={(e) => set('preferred_language', e.target.value as 'en' | 'ceb')}
+            disabled={languageBusy || busy}
+            onChange={(e) => void changeLanguage(e.target.value as 'en' | 'ceb')}
           >
             <option value="en">English — Default</option>
             <option value="ceb">Bisaya (Cebuano)</option>
           </select>
-          <p className="mt-1.5 text-xs text-stone-500">{t('Choose the language you are most comfortable using.')}</p>
+          <p className="mt-1.5 text-xs text-stone-500">
+            {t('Changing this preference saves immediately and updates your artisan workspace.')}
+          </p>
         </div>
         <div>
           <label className={labelClass} htmlFor="ap-email">{t('Email')}</label>
@@ -191,7 +227,7 @@ export default function ProfileForm({ initial }: { initial: ArtisanProfileInitia
         <button
           type="button"
           onClick={save}
-          disabled={busy}
+          disabled={busy || languageBusy}
           className="btn-primary w-full !rounded-xl !py-2.5 sm:w-auto disabled:cursor-not-allowed disabled:opacity-60"
         >
           {busy ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
