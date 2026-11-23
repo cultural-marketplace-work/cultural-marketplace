@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { compressImage } from '@/lib/imageCompress';
+import { AlertCircle, Camera, Image as ImageIcon, LoaderCircle, Plus, Trash2, Upload, X } from 'lucide-react';
 
 // Product media manager shown on the edit page (needs the product to exist).
 // Main image + up to 20 gallery images with automatic client-side canvas compression.
@@ -20,195 +21,257 @@ export default function ProductMedia({
   const galleryInput = useRef<HTMLInputElement>(null);
 
   async function upload(
-  file: File,
-  kind: 'main' | 'gallery',
-  clearBusyOnFinish = true
-): Promise<boolean> {
-  setError('');
-
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    setError('Only JPEG, PNG, or WebP images are allowed.');
-    return false;
-  }
-
-  try {
-    setBusy(`Compressing ${kind === 'main' ? 'main' : 'gallery'} photo…`);
-
-    const compressedFile = await compressImage(file, 1200, 1200, 0.8);
-
-    setBusy(
-      kind === 'main'
-        ? 'Uploading main photo…'
-        : 'Uploading to gallery…'
-    );
-
-    const fd = new FormData();
-    fd.append('productId', String(productId));
-    fd.append('kind', kind);
-    fd.append('file', compressedFile);
-
-    const res = await fetch(`/api/artisan/products/${productId}/media`, {
-      method: 'POST',
-      body: fd,
-    });
-
-    const data = await res.json();
-
-    if (!res.ok || data.status !== 'success') {
-      setError(data.message || 'Upload failed.');
+    file: File,
+    kind: 'main' | 'gallery',
+    clearBusyOnFinish = true,
+    progressLabel?: string,
+  ): Promise<boolean> {
+    setError('');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPEG, PNG, or WebP image.');
       return false;
     }
 
-    if (kind === 'main') {
-      setMain(data.image_path);
-    } else if (Array.isArray(data.product_gallery)) {
-      // Immediately update the gallery without refreshing the page.
-      setGallery(data.product_gallery);
-    }
+    try {
+      setBusy(progressLabel ?? `Optimizing ${kind === 'main' ? 'cover' : 'gallery'} photo…`);
+      const compressedFile = await compressImage(file, 1200, 1200, 0.8);
+      setBusy(kind === 'main' ? 'Uploading cover photo…' : 'Adding photo to gallery…');
 
-    return true;
-  } catch {
-    setError('Upload failed. Please check your connection and try again.');
-    return false;
-  } finally {
-    if (clearBusyOnFinish) setBusy('');
+      const formData = new FormData();
+      formData.append('productId', String(productId));
+      formData.append('kind', kind);
+      formData.append('file', compressedFile);
+
+      const response = await fetch(`/api/artisan/products/${productId}/media`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        setError(data.message || 'The photo could not be uploaded. Please try again.');
+        return false;
+      }
+
+      if (kind === 'main') {
+        setMain(data.image_path);
+      } else if (Array.isArray(data.product_gallery)) {
+        setGallery(data.product_gallery);
+      }
+      return true;
+    } catch (cause) {
+      console.error('[product-media] upload failed:', cause);
+      setError('The photo could not be uploaded. Check your connection and try again.');
+      return false;
+    } finally {
+      if (clearBusyOnFinish) setBusy('');
+    }
   }
-}
 
   async function handleGalleryFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
     const remaining = 20 - gallery.length;
     if (remaining <= 0) {
-      setError('You have reached the maximum of 20 gallery photos.');
+      setError('The gallery already has the maximum of 20 photos.');
       return;
     }
     const files = Array.from(fileList).slice(0, remaining);
-    for (let i = 0; i < files.length; i++) {
-      setBusy(`Processing & uploading photo ${i + 1} of ${files.length}…`);
-      const ok = await upload(files[i], 'gallery', false);
-      if (!ok) break;
+    try {
+      for (let index = 0; index < files.length; index++) {
+        const uploaded = await upload(
+          files[index],
+          'gallery',
+          false,
+          `Preparing photo ${index + 1} of ${files.length}…`,
+        );
+        if (!uploaded) break;
+      }
+    } finally {
+      setBusy('');
     }
-    setBusy('');
   }
 
   async function removeMain() {
-    setBusy('Removing main image…');
-    const res = await fetch(`/api/artisan/products/${productId}/media?productId=${productId}&kind=main-remove`, { method: 'DELETE' });
-    setBusy('');
-    if (res.ok) setMain(null);
+    setError('');
+    setBusy('Removing cover photo…');
+    try {
+      const response = await fetch(`/api/artisan/products/${productId}/media?productId=${productId}&kind=main-remove`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('The cover photo could not be removed.');
+      setMain(null);
+    } catch (cause) {
+      console.error('[product-media] failed to remove cover photo:', cause);
+      setError(cause instanceof Error ? cause.message : 'The cover photo could not be removed.');
+    } finally {
+      setBusy('');
+    }
   }
 
   async function removeGallery(url: string) {
-    setBusy('Removing gallery image…');
-    const res = await fetch(`/api/artisan/products/${productId}/media?productId=${productId}&url=${encodeURIComponent(url)}`, { method: 'DELETE' });
-    const data = await res.json();
-    setBusy('');
-    if (data.status === 'success') setGallery(data.product_gallery ?? []);
+    setError('');
+    setBusy('Removing gallery photo…');
+    try {
+      const response = await fetch(`/api/artisan/products/${productId}/media?productId=${productId}&url=${encodeURIComponent(url)}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || 'The gallery photo could not be removed.');
+      }
+      setGallery(data.product_gallery ?? []);
+    } catch (cause) {
+      console.error('[product-media] failed to remove gallery photo:', cause);
+      setError(cause instanceof Error ? cause.message : 'The gallery photo could not be removed.');
+    } finally {
+      setBusy('');
+    }
   }
 
   return (
-    <div className="card space-y-4 p-5">
-      <div className="border-b border-brand-100 pb-2">
-        <h2 className="font-serif text-lg font-bold text-brand-900">Product Media & Gallery</h2>
-        <p className="text-xs text-stone-500">
-          Upload crisp craft photos. All photos are automatically compressed before upload to preserve storage. Max 20 photos total.
-        </p>
-      </div>
-
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      {busy && <p className="text-sm font-medium text-brand-700 animate-pulse">{busy}</p>}
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-stone-700">Main Cover Image</label>
-        <div className="flex items-center gap-4">
-          {main ? (
-            <div className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={main} alt="Main product cover" className="h-28 w-28 rounded-xl object-cover border border-stone-200 shadow-xs" />
-              <button
-                type="button"
-                onClick={removeMain}
-                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow-xs hover:bg-red-600"
-                aria-label="Remove main image"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="flex h-28 w-28 flex-col items-center justify-center rounded-xl border-2 border-dashed border-stone-300 text-stone-400 hover:border-brand-400 hover:text-brand-600 transition"
-              onClick={() => mainInput.current?.click()}
-            >
-              <span className="text-2xl">🖼️</span>
-              <span className="mt-1 text-xs font-medium">Upload Cover</span>
-            </button>
-          )}
-          <p className="text-xs text-stone-400">
-            Featured on marketplace catalog and search results.<br />
-            JPEG, PNG, or WebP. Automatically optimized for web.
-          </p>
-        </div>
-        <input
-          ref={mainInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) upload(f, 'main');
-            e.target.value = '';
-          }}
-        />
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-sm font-medium text-stone-700">
-            Gallery Showcase ({gallery.length}/20)
-          </label>
-          <span className="text-xs text-stone-400">
-            {20 - gallery.length} slot{20 - gallery.length === 1 ? '' : 's'} remaining
+    <section className="overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/95 shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-abaca-100 px-5 py-4 sm:px-6">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-ochre-50 text-ochre-800">
+            <Camera size={20} aria-hidden="true" />
           </span>
+          <div>
+            <h2 className="font-serif text-xl font-bold text-brand-900">Photo story</h2>
+            <p className="mt-0.5 text-xs leading-5 text-stone-500">Show the details and care behind your creation.</p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {gallery.map((url) => (
-            <div key={url} className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="Gallery item" className="h-20 w-20 rounded-lg object-cover border border-stone-200 shadow-2xs" />
+        <span className="badge border border-abaca-200 bg-canvas text-stone-600">Up to 20 gallery photos</span>
+      </header>
+
+      <div className="space-y-5 p-4 sm:p-6">
+        {error && (
+          <p role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <AlertCircle size={17} aria-hidden="true" className="mt-0.5 shrink-0" />
+            {error}
+          </p>
+        )}
+        {busy && (
+          <p role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-ochre-200 bg-ochre-50/70 px-4 py-3 text-sm font-medium text-ochre-900">
+            <LoaderCircle size={16} aria-hidden="true" className="animate-spin" />
+            {busy}
+          </p>
+        )}
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
+          <section aria-labelledby="cover-photo-title" className="rounded-2xl border border-abaca-200/70 bg-canvas/70 p-4">
+            <div className="mb-3">
+              <h3 id="cover-photo-title" className="text-sm font-bold text-brand-900">Cover photo</h3>
+              <p className="mt-1 text-xs leading-5 text-stone-500">This is the first photo buyers see in the marketplace.</p>
+            </div>
+            <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-abaca-200 bg-white">
+              {main ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={main} alt="Current cover photo for this creation" className="h-full w-full object-cover" />
+              ) : (
+                <div className="px-5 text-center">
+                  <ImageIcon size={28} aria-hidden="true" className="mx-auto text-abaca-500" />
+                  <p className="mt-2 text-sm font-semibold text-stone-700">No cover photo yet</p>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">Choose a clear, well-lit photo of your craft.</p>
+                </div>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => removeGallery(url)}
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-xs hover:bg-red-600"
-                aria-label="Remove image"
+                className="btn-primary min-h-10 px-3 text-xs"
+                disabled={!!busy}
+                onClick={() => mainInput.current?.click()}
               >
-                ✕
+                <Upload size={15} aria-hidden="true" />
+                {main ? 'Replace cover photo' : 'Upload cover photo'}
               </button>
+              {main && (
+                <button
+                  type="button"
+                  className="btn-outline min-h-10 px-3 text-xs text-red-700 hover:border-red-300 hover:bg-red-50"
+                  disabled={!!busy}
+                  onClick={() => void removeMain()}
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                  Remove
+                </button>
+              )}
             </div>
-          ))}
-          {gallery.length < 20 && (
-            <button
-              type="button"
-              className="flex h-20 w-20 flex-col items-center justify-center rounded-lg border-2 border-dashed border-stone-300 text-stone-400 hover:border-brand-400 hover:text-brand-600 transition"
-              onClick={() => galleryInput.current?.click()}
-            >
-              <span className="text-xl">＋</span>
-              <span className="text-[10px] font-medium">Add photos</span>
-            </button>
-          )}
+            <p className="mt-3 text-[11px] leading-5 text-stone-500">JPEG, PNG, or WebP. Photos are optimized before upload.</p>
+            <input
+              ref={mainInput}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              aria-label="Choose a cover photo"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void upload(file, 'main');
+                event.target.value = '';
+              }}
+            />
+          </section>
+
+          <section aria-labelledby="gallery-title" className="rounded-2xl border border-abaca-200/70 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 id="gallery-title" className="text-sm font-bold text-brand-900">Gallery</h3>
+                <p className="mt-1 text-xs leading-5 text-stone-500">Add close-ups, materials, and different angles.</p>
+              </div>
+              <span className="badge border border-abaca-200 bg-canvas text-stone-600">{gallery.length} / 20</span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {gallery.map((url, index) => (
+                <div key={url} className="group relative aspect-square overflow-hidden rounded-xl border border-abaca-200 bg-canvas">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`Gallery photo ${index + 1}`} className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.03]" />
+                  <button
+                    type="button"
+                    onClick={() => void removeGallery(url)}
+                    disabled={!!busy}
+                    className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/95 text-red-700 shadow-sm transition hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+                    aria-label={`Remove gallery photo ${index + 1}`}
+                  >
+                    <X size={17} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+              {gallery.length === 0 && (
+                <div className="col-span-2 flex aspect-[2/1] flex-col items-center justify-center rounded-xl border border-dashed border-abaca-300 bg-canvas/60 px-4 text-center sm:col-span-3">
+                  <ImageIcon size={23} aria-hidden="true" className="text-abaca-500" />
+                  <p className="mt-2 text-sm font-semibold text-stone-700">Your gallery is ready for more views</p>
+                  <p className="mt-1 text-xs text-stone-500">A few photos help buyers appreciate your craft.</p>
+                </div>
+              )}
+              {gallery.length < 20 && (
+                <button
+                  type="button"
+                  className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-abaca-300 bg-canvas/50 text-ochre-800 transition hover:border-ochre-500 hover:bg-ochre-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ochre-600"
+                  onClick={() => galleryInput.current?.click()}
+                  disabled={!!busy}
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">
+                    <Plus size={19} aria-hidden="true" />
+                  </span>
+                  <span className="mt-2 text-xs font-semibold">Add photos</span>
+                  <span className="mt-1 text-[10px] text-stone-500">{20 - gallery.length} slots left</span>
+                </button>
+              )}
+            </div>
+            <input
+              ref={galleryInput}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              aria-label="Choose gallery photos"
+              className="hidden"
+              onChange={(event) => {
+                void handleGalleryFiles(event.target.files);
+                event.target.value = '';
+              }}
+            />
+          </section>
         </div>
-        <input
-          ref={galleryInput}
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-          onChange={(e) => {
-            handleGalleryFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
       </div>
-    </div>
+    </section>
   );
 }

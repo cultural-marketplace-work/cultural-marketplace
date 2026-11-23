@@ -7,6 +7,7 @@
 import bcrypt from 'bcryptjs';
 import { sql, tsString, parseJsonish } from './dbPg';
 import { cached, invalidate } from './cache';
+import { ARTISAN_CEB_TRANSLATIONS } from './artisanTranslations';
 import {
   seedUsers, seedArtisans, seedCategories, seedProducts,
   seedOrders, seedOrderItems, seedNotifications, seedSettings, normalizeBcrypt,
@@ -75,7 +76,7 @@ function demo(): DemoRow {
         { id: 1, customer_id: 1, artisan_id: 10, product_id: 17, last_message_at: new Date(Date.now() - 3600_000).toISOString(), created_at: new Date(Date.now() - 7200_000).toISOString() },
       ],
       chat_messages: [
-        { id: 1, conversation_id: 1, sender_role: 'customer', message: 'Hi! Is this basket still available in size M?', read_at: new Date().toISOString(), created_at: new Date(Date.now() - 3600_000).toISOString() },
+        { id: 1, conversation_id: 1, sender_role: 'customer', message: 'Hi! Is this basket still available in size M?', product_id: 17, product_name: 'Handwoven Rattan Basket', reply_to_message_id: null, reply_to_message: null, reply_to_sender_role: null, read_at: new Date().toISOString(), created_at: new Date(Date.now() - 3600_000).toISOString() },
       ],
       notifications: seedNotifications.map((n) => n.user_role === 'artisan'
         ? { ...n, user_id: null, artisan_id: n.user_id }
@@ -397,10 +398,14 @@ export async function takePendingRegistration(email: string): Promise<{ name: st
 }
 
 export async function listArtisanUiTranslations(language: 'en' | 'ceb'): Promise<Record<string, string>> {
-  if (language === 'en' || !usingPostgres) return {};
+  if (language === 'en') return {};
+  if (!usingPostgres) return { ...ARTISAN_CEB_TRANSLATIONS };
   return cached(`artisan-ui-translations:${language}`, async () => {
     const rows = await sql`select source_text, translated_text from artisan_ui_translations where language_code = ${language}`;
-    return Object.fromEntries(rows.map((row) => [String(row.source_text), String(row.translated_text)]));
+    return {
+      ...ARTISAN_CEB_TRANSLATIONS,
+      ...Object.fromEntries(rows.map((row) => [String(row.source_text), String(row.translated_text)])),
+    };
   }, 15 * 60_000);
 }
 
@@ -1512,17 +1517,35 @@ export async function markNotificationsRead(userId: number, role: string): Promi
   });
 }
 
+export async function getUnreadNotificationCount(userId: number, role: string): Promise<number> {
+  if (usingPostgres) {
+    const rows = role === 'artisan'
+      ? await sql`select count(*)::int as n from notifications where artisan_id = ${userId} and user_role = ${role} and is_read = false`
+      : await sql`select count(*)::int as n from notifications where user_id = ${userId} and user_role = ${role} and is_read = false`;
+    return num((rows[0] as Record<string, unknown>)?.n ?? 0);
+  }
+  return store!.notifications.filter((n) =>
+    n.user_role === role &&
+    (role === 'artisan' ? n.artisan_id === userId : n.user_id === userId) &&
+    !n.is_read
+  ).length;
+}
+
 // ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
 export async function openConversation(customerId: number, artisanId: number, productId: number): Promise<number> {
   if (usingPostgres) {
-    const rows = await sql`select id from chat_conversations where customer_id = ${customerId} and artisan_id = ${artisanId} and product_id = ${productId} limit 1`;
-    if (rows.length) return num((rows[0] as Record<string, unknown>).id);
+    const rows = await sql`select id from chat_conversations where customer_id = ${customerId} and artisan_id = ${artisanId} limit 1`;
+    if (rows.length) {
+      const id = num((rows[0] as Record<string, unknown>).id);
+      await sql`update chat_conversations set product_id = ${productId}, last_message_at = now() where id = ${id}`;
+      return id;
+    }
     const ins = await sql`insert into chat_conversations (customer_id, artisan_id, product_id) values (${customerId}, ${artisanId}, ${productId}) returning id`;
     return num((ins[0] as Record<string, unknown>).id);
   }
-  let conv = store!.chat_conversations.find((c) => c.customer_id === customerId && c.artisan_id === artisanId && c.product_id === productId);
+  let conv = store!.chat_conversations.find((c) => c.customer_id === customerId && c.artisan_id === artisanId);
   if (!conv) {
     conv = {
       id: Math.max(0, ...store!.chat_conversations.map((c) => c.id)) + 1,
@@ -1530,6 +1553,9 @@ export async function openConversation(customerId: number, artisanId: number, pr
       last_message_at: new Date().toISOString(), created_at: new Date().toISOString(),
     };
     store!.chat_conversations.push(conv);
+  } else {
+    conv.product_id = productId;
+    conv.last_message_at = new Date().toISOString();
   }
   return conv.id;
 }
@@ -1553,13 +1579,13 @@ export async function getConversation(id: number): Promise<{ id: number; custome
   return c ? { id: c.id, customer_id: c.customer_id, artisan_id: c.artisan_id, product_id: c.product_id } : null;
 }
 
-export async function listConversations(user: { id: number; role: Role }): Promise<Array<{ id: number; counterpart: string; product_name: string | null; last_message_at: string }>> {
+export async function listConversations(user: { id: number; role: Role }): Promise<Array<{ id: number; counterpart: string; product_id: number | null; product_name: string | null; last_message_at: string }>> {
   if (usingPostgres) {
     const isCustomer = user.role === 'customer';
     // Left join + coalesce: a missing users row must never silently drop a
     // conversation from the inbox.
     const rows = await sql`
-      select c.id,
+      select c.id, c.product_id,
         ${isCustomer ? sql`a.name` : sql`coalesce(u.name, 'Customer')`} as counterpart,
         p.name as product_name, c.last_message_at
       from chat_conversations c
@@ -1570,6 +1596,7 @@ export async function listConversations(user: { id: number; role: Role }): Promi
       order by c.last_message_at desc`;
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
       id: num(r.id), counterpart: String(r.counterpart), product_name: (r.product_name as string) ?? null,
+      product_id: r.product_id == null ? null : num(r.product_id),
       last_message_at: String(r.last_message_at),
     }));
   }
@@ -1582,6 +1609,7 @@ export async function listConversations(user: { id: number; role: Role }): Promi
       return {
         id: c.id,
         counterpart: user.role === 'customer' ? artisan?.name ?? 'Artisan' : cust?.name ?? 'Customer',
+        product_id: c.product_id ?? null,
         product_name: product?.name ?? null,
         last_message_at: c.last_message_at,
       };
@@ -1591,13 +1619,66 @@ export async function listConversations(user: { id: number; role: Role }): Promi
 
 export async function listMessages(conversationId: number): Promise<ChatMessage[]> {
   if (usingPostgres) {
-    const rows = await sql`select * from chat_messages where conversation_id = ${conversationId} order by created_at asc limit 200`;
+    const rows = await sql`
+      select m.*, p.name as product_name,
+        replied.message as reply_to_message,
+        replied.sender_role as reply_to_sender_role
+      from chat_messages m
+      left join products p on p.id = m.product_id
+      left join chat_messages replied on replied.id = m.reply_to_message_id
+      where m.conversation_id = ${conversationId}
+      order by m.created_at asc
+      limit 200`;
     return (rows as unknown as Record<string, unknown>[]).map((r) => ({
       id: num(r.id), conversation_id: num(r.conversation_id), sender_role: r.sender_role as ChatMessage['sender_role'],
-      message: String(r.message), read_at: tsString(r.read_at), created_at: tsString(r.created_at) ?? new Date().toISOString(),
+      message: String(r.message),
+      product_id: r.product_id == null ? null : num(r.product_id),
+      product_name: r.product_name == null ? null : String(r.product_name),
+      reply_to_message_id: r.reply_to_message_id == null ? null : num(r.reply_to_message_id),
+      reply_to_message: r.reply_to_message == null ? null : String(r.reply_to_message),
+      reply_to_sender_role: r.reply_to_sender_role == null ? null : r.reply_to_sender_role as ChatMessage['reply_to_sender_role'],
+      read_at: tsString(r.read_at), created_at: tsString(r.created_at) ?? new Date().toISOString(),
     }));
   }
-  return store!.chat_messages.filter((m) => m.conversation_id === conversationId).sort((a, b) => a.id - b.id);
+  return store!.chat_messages
+    .filter((m) => m.conversation_id === conversationId)
+    .map((m) => ({
+      ...m,
+      product_name: m.product_id ? store!.products.find((p) => p.id === m.product_id)?.name ?? null : null,
+      reply_to_message: m.reply_to_message_id
+        ? store!.chat_messages.find((reply) => reply.id === m.reply_to_message_id)?.message ?? null
+        : null,
+      reply_to_sender_role: m.reply_to_message_id
+        ? store!.chat_messages.find((reply) => reply.id === m.reply_to_message_id)?.sender_role ?? null
+        : null,
+    }))
+    .sort((a, b) => a.id - b.id);
+}
+
+export async function getMessageReplyTarget(
+  conversationId: number,
+  messageId: number,
+): Promise<{ id: number; sender_role: ChatMessage['sender_role']; message: string } | null> {
+  if (usingPostgres) {
+    const rows = await sql`
+      select id, sender_role, message
+      from chat_messages
+      where id = ${messageId} and conversation_id = ${conversationId}
+      limit 1`;
+    if (!rows.length) return null;
+    const row = rows[0] as Record<string, unknown>;
+    return {
+      id: num(row.id),
+      sender_role: row.sender_role as ChatMessage['sender_role'],
+      message: String(row.message),
+    };
+  }
+  const message = store!.chat_messages.find((item) =>
+    item.id === messageId && item.conversation_id === conversationId
+  );
+  return message
+    ? { id: message.id, sender_role: message.sender_role, message: message.message }
+    : null;
 }
 
 /** Unread incoming chat messages for a customer (sent by artisans, read_at still null). */
@@ -1614,15 +1695,61 @@ export async function getUnreadMessageCount(customerId: number): Promise<number>
   return store!.chat_messages.filter((m) => mine.has(m.conversation_id) && m.sender_role === 'artisan' && !m.read_at).length;
 }
 
-export async function sendMessage(conversationId: number, senderRole: 'customer' | 'artisan', message: string): Promise<void> {
+export async function getUnreadArtisanMessageCount(artisanId: number): Promise<number> {
   if (usingPostgres) {
-    await sql`insert into chat_messages (conversation_id, sender_role, message) values (${conversationId}, ${senderRole}, ${message})`;
+    const rows = await sql`
+      select count(*)::int as n
+      from chat_messages m
+      join chat_conversations c on c.id = m.conversation_id
+      where c.artisan_id = ${artisanId} and m.sender_role = 'customer' and m.read_at is null`;
+    return num((rows[0] as Record<string, unknown>)?.n ?? 0);
+  }
+  const mine = new Set(store!.chat_conversations.filter((c) => c.artisan_id === artisanId).map((c) => c.id));
+  return store!.chat_messages.filter((m) => mine.has(m.conversation_id) && m.sender_role === 'customer' && !m.read_at).length;
+}
+
+export async function markArtisanMessagesRead(artisanId: number): Promise<void> {
+  if (usingPostgres) {
+    await sql`
+      update chat_messages m set read_at = now()
+      from chat_conversations c
+      where c.id = m.conversation_id and c.artisan_id = ${artisanId}
+        and m.sender_role = 'customer' and m.read_at is null`;
+    return;
+  }
+  const mine = new Set(store!.chat_conversations.filter((c) => c.artisan_id === artisanId).map((c) => c.id));
+  store!.chat_messages.forEach((m) => {
+    if (mine.has(m.conversation_id) && m.sender_role === 'customer' && !m.read_at) {
+      m.read_at = new Date().toISOString();
+    }
+  });
+}
+
+export async function sendMessage(
+  conversationId: number,
+  senderRole: 'customer' | 'artisan',
+  message: string,
+  requestedProductId?: number | null,
+  replyToMessageId?: number | null,
+): Promise<void> {
+  const conversation = await getConversation(conversationId);
+  const productId = requestedProductId !== undefined
+    ? requestedProductId
+    : (conversation?.product_id ?? null);
+  if (usingPostgres) {
+    await sql`insert into chat_messages (conversation_id, sender_role, message, product_id, reply_to_message_id)
+      values (${conversationId}, ${senderRole}, ${message}, ${productId}, ${replyToMessageId ?? null})`;
     await sql`update chat_conversations set last_message_at = now() where id = ${conversationId}`;
     return;
   }
   store!.chat_messages.push({
     id: Math.max(0, ...store!.chat_messages.map((m) => m.id)) + 1,
     conversation_id: conversationId, sender_role: senderRole, message,
+    product_id: productId,
+    product_name: productId ? store!.products.find((p) => p.id === productId)?.name ?? null : null,
+    reply_to_message_id: replyToMessageId ?? null,
+    reply_to_message: null,
+    reply_to_sender_role: null,
     read_at: null, created_at: new Date().toISOString(),
   });
   const c = store!.chat_conversations.find((x) => x.id === conversationId);

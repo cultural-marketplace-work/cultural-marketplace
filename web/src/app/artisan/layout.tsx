@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
-import { getArtisan, listArtisanUiTranslations } from '@/lib/db';
+import {
+  getArtisan,
+  getUnreadArtisanMessageCount,
+  getUnreadNotificationCount,
+  listArtisanUiTranslations,
+} from '@/lib/db';
 import PortalSidebar, { type NavSection } from '@/components/PortalSidebar';
 import { ArtisanLanguageProvider } from '@/components/ArtisanLanguageProvider';
 
@@ -54,11 +59,22 @@ export default async function ArtisanLayout({ children }: { children: React.Reac
   const isVerified = artisan?.verification_status === 'approved';
   const language = artisan?.preferred_language ?? 'en';
   const messages = await listArtisanUiTranslations(language);
+  const [unreadMessages, unreadNotifications] = isVerified
+    ? await Promise.all([
+        getUnreadArtisanMessageCount(session.id),
+        getUnreadNotificationCount(session.id, 'artisan'),
+      ])
+    : [0, 0];
   const sections = SECTIONS.map((section) => ({
     ...section,
     items: section.items.map((item) => ({
       ...item,
       disabled: !isVerified && !['/artisan/dashboard', '/artisan/profile', '/artisan-verification'].includes(item.href),
+      badge: item.href === '/artisan/messages'
+        ? unreadMessages
+        : item.href === '/artisan/notifications'
+          ? unreadNotifications
+          : undefined,
     })),
   }));
 

@@ -65,6 +65,7 @@ export interface NavSection {
     label: string;
     icon?: NavIconName;
     disabled?: boolean;
+    badge?: number;
   }>;
 }
 
@@ -220,8 +221,20 @@ export default function PortalSidebar({
                       aria-disabled="true"
                       title={t('Available after artisan verification')}
                     >
-                      {Icon && <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />}
-                      <span className="truncate">{t(item.label)}</span>
+                      {Icon && (
+                        <span className="relative inline-flex shrink-0">
+                          <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />
+                          {!!item.badge && (
+                            <span aria-hidden="true" className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B42318] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-[#F5EBDD]">
+                              {item.badge > 99 ? '99+' : item.badge}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      <span className="truncate">
+                        {t(item.label)}
+                        {!!item.badge && <span className="sr-only">, {item.badge} unread</span>}
+                      </span>
                     </span>
                   ) : (
                     <Link
@@ -232,8 +245,20 @@ export default function PortalSidebar({
                       className={itemClass}
                       onClick={() => setOpen(false)}
                     >
-                      {Icon && <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />}
-                      <span className="truncate">{t(item.label)}</span>
+                      {Icon && (
+                        <span className="relative inline-flex shrink-0">
+                          <Icon size={17} strokeWidth={1.8} aria-hidden="true" className={iconClass} />
+                          {!!item.badge && (
+                            <span aria-hidden="true" className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B42318] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-[#F5EBDD]">
+                              {item.badge > 99 ? '99+' : item.badge}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      <span className="truncate">
+                        {t(item.label)}
+                        {!!item.badge && <span className="sr-only">, {item.badge} unread</span>}
+                      </span>
                     </Link>
                   )
                 );

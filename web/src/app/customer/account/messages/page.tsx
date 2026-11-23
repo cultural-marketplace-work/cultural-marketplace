@@ -17,7 +17,12 @@ export default async function CustomerMessagesPage({ searchParams }: { searchPar
         <h1 className="font-serif text-3xl font-bold text-brand-900">Messages</h1>
         <MessagesClient
           role="customer"
-          conversations={conversations.map((c2) => ({ id: c2.id, counterpart: c2.counterpart, product_name: c2.product_name }))}
+          conversations={conversations.map((c2) => ({
+            id: c2.id,
+            counterpart: c2.counterpart,
+            product_id: c2.product_id,
+            product_name: c2.product_name,
+          }))}
           initialConversationId={c ? Number(c) : conversations[0]?.id ?? null}
         />
       </main>
