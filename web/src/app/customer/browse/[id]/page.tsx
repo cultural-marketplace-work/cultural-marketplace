@@ -26,6 +26,10 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
 const productReviews = reviews.filter((r) => r.purchase_type !== 'workshop');
 const workshopReviews = reviews.filter((r) => r.purchase_type === 'workshop');
 
+  const tutorialImages = product.has_tutorial ? product.tutorial_gallery ?? [] : [];
+  const mainImage = product.image_path ?? tutorialImages[0] ?? null;
+  const gallery = [...tutorialImages, ...(product.product_gallery ?? [])]
+    .filter((image, index, images) => image !== mainImage && images.indexOf(image) === index);
   const lat =
     product.tutorial_lat ??
     (product.tutorial_dates?.[0]?.lat ? Number(product.tutorial_dates[0].lat) : null);
@@ -43,8 +47,8 @@ const workshopReviews = reviews.filter((r) => r.purchase_type === 'workshop');
           <div className="grid gap-5 md:grid-cols-[340px_1fr]">
             {/* LEFT: main image + thumbnails */}
             <ProductGallery
-              main={product.image_path}
-              gallery={product.product_gallery}
+              main={mainImage}
+              gallery={gallery}
               name={product.name}
               hasTutorial={product.has_tutorial}
             />

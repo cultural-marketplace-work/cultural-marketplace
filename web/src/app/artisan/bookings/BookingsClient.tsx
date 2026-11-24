@@ -2,6 +2,20 @@
 
 import Link from 'next/link';
 import { useState, useMemo } from 'react';
+import {
+  AlertCircle,
+  CalendarDays,
+  CheckCheck,
+  CircleCheck,
+  Clock3,
+  MapPin,
+  Printer,
+  Search,
+  Ticket,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
 
 export interface BookingRow {
   order_item_id: number;
@@ -30,18 +44,22 @@ export default function BookingsClient({ initial }: { initial: BookingRow[] }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'attended' | 'cancelled_or_noshow'>('all');
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
 
   async function setStatus(id: number, status: string) {
     setBusyId(id);
+    setActionError('');
     try {
-      await fetch('/api/artisan/orders/status-booking', {
+      const response = await fetch('/api/artisan/orders/status-booking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_item_id: id, status }),
       });
+      if (!response.ok) throw new Error('Booking status could not be updated. Please try again.');
       setRows((rs) => rs.map((r) => (r.order_item_id === id ? { ...r, status } : r)));
-    } catch {
-      // ignore
+    } catch (cause) {
+      console.error('[artisan-bookings] failed to update booking status:', cause);
+      setActionError(cause instanceof Error ? cause.message : 'Booking status could not be updated. Please try again.');
     } finally {
       setBusyId(null);
     }
@@ -82,93 +100,93 @@ export default function BookingsClient({ initial }: { initial: BookingRow[] }) {
   }
 
   return (
-    <div className="mt-6 space-y-5">
+    <div className="space-y-5">
       {/* Search & Actions Header (Screen Only) */}
       <div className="print:hidden space-y-4">
-        {/* Row 1: Search Box + Print Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative flex-1">
-            <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">
-              🔍
-            </span>
-            <input
-              type="search"
-              placeholder="Search by ticket code (e.g. TKT...), attendee name, or customer…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="input w-full rounded-xl pl-9 text-sm border-stone-200 bg-white"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-stone-700"
-              >
-                Clear
-              </button>
-            )}
+        <div className="flex flex-col gap-3 rounded-2xl border border-abaca-200/80 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-serif text-xl font-bold text-brand-900">Workshop roster</h2>
+            <p className="mt-1 text-xs text-stone-500">{filtered.length} bookings shown</p>
           </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="relative block w-full sm:min-w-[280px]">
+              <span className="sr-only">Search bookings</span>
+              <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                type="search"
+                placeholder="Search ticket, learner, workshop…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="input min-h-10 pl-10 pr-10 text-sm"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-stone-400 hover:bg-canvas hover:text-stone-700"
+                  aria-label="Clear booking search"
+                >
+                  <X size={15} aria-hidden="true" />
+                </button>
+              )}
+            </label>
             <button
               type="button"
               onClick={handlePrintRoster}
-              className="btn-outline flex items-center gap-1.5 px-3 py-2 text-xs font-semibold shrink-0"
+              className="btn-outline min-h-10 shrink-0 px-3 text-xs"
               title="Print session roster for offline attendance check"
             >
-              <span>🖨️</span>
-              <span>Print Attendance Roster</span>
+              <Printer size={15} aria-hidden="true" />
+              Print roster
             </button>
           </div>
         </div>
 
         {/* Row 2: Status Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <button
             type="button"
             onClick={() => setStatusFilter('all')}
-            className={`rounded-lg px-3 py-1.5 font-medium transition ${
-              statusFilter === 'all'
-                ? 'bg-brand-600 text-white shadow-xs'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
+            aria-pressed={statusFilter === 'all'}
+            className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${statusFilter === 'all' ? 'border-brand-700 bg-brand-700 text-white shadow-sm' : 'border-abaca-200 bg-white/90 text-stone-700 hover:border-ochre-300 hover:bg-ochre-50/50'}`}
           >
-            All Bookings ({counts.all})
+            <span className="flex items-center gap-2"><Ticket size={15} aria-hidden="true" /> All bookings</span>
+            <span className={`rounded-full px-2 py-1 text-[10px] ${statusFilter === 'all' ? 'bg-white/15' : 'bg-canvas text-stone-600'}`}>{counts.all}</span>
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('pending')}
-            className={`rounded-lg px-3 py-1.5 font-medium transition ${
-              statusFilter === 'pending'
-                ? 'bg-ochre-500 text-charcoal-950 font-bold shadow-xs border border-ochre-600'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
+            aria-pressed={statusFilter === 'pending'}
+            className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${statusFilter === 'pending' ? 'border-ochre-500 bg-ochre-100 text-ochre-950 shadow-sm' : 'border-abaca-200 bg-white/90 text-stone-700 hover:border-ochre-300 hover:bg-ochre-50/50'}`}
           >
-            ⏳ Upcoming / Pending ({counts.pending})
+            <span className="flex items-center gap-2"><Clock3 size={15} aria-hidden="true" /> Upcoming / pending</span>
+            <span className="rounded-full bg-white/70 px-2 py-1 text-[10px] text-stone-700">{counts.pending}</span>
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('attended')}
-            className={`rounded-lg px-3 py-1.5 font-medium transition ${
-              statusFilter === 'attended'
-                ? 'bg-charcoal-900 text-ochre-300 shadow-xs'
-                : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
-            }`}
+            aria-pressed={statusFilter === 'attended'}
+            className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${statusFilter === 'attended' ? 'border-charcoal-900 bg-charcoal-900 text-ochre-200 shadow-sm' : 'border-abaca-200 bg-white/90 text-stone-700 hover:border-ochre-300 hover:bg-ochre-50/50'}`}
           >
-            ✅ Checked In / Attended ({counts.attended})
+            <span className="flex items-center gap-2"><CheckCheck size={15} aria-hidden="true" /> Checked in</span>
+            <span className={`rounded-full px-2 py-1 text-[10px] ${statusFilter === 'attended' ? 'bg-white/10' : 'bg-canvas text-stone-600'}`}>{counts.attended}</span>
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('cancelled_or_noshow')}
-            className={`rounded-lg px-3 py-1.5 font-medium transition ${
-              statusFilter === 'cancelled_or_noshow'
-                ? 'bg-red-600 text-white shadow-xs'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
+            aria-pressed={statusFilter === 'cancelled_or_noshow'}
+            className={`flex min-h-12 items-center justify-between gap-3 rounded-xl border px-3.5 text-left text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 ${statusFilter === 'cancelled_or_noshow' ? 'border-red-700 bg-red-700 text-white shadow-sm' : 'border-abaca-200 bg-white/90 text-stone-700 hover:border-red-200 hover:bg-red-50/50'}`}
           >
-            ❌ Cancelled / Absent ({counts.cancelled})
+            <span className="flex items-center gap-2"><X size={15} aria-hidden="true" /> Cancelled / absent</span>
+            <span className={`rounded-full px-2 py-1 text-[10px] ${statusFilter === 'cancelled_or_noshow' ? 'bg-white/15' : 'bg-canvas text-stone-600'}`}>{counts.cancelled}</span>
           </button>
         </div>
+        {actionError && (
+          <p role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <AlertCircle size={16} aria-hidden="true" />
+            {actionError}
+          </p>
+        )}
       </div>
 
       {/* Printable Sheet View (Hidden on Screen, Shown when Printing) */}
@@ -220,125 +238,128 @@ export default function BookingsClient({ initial }: { initial: BookingRow[] }) {
           const isBusy = busyId === b.order_item_id;
 
           return (
-            <div
+            <article
               key={b.order_item_id}
-              className={`card flex flex-col md:flex-row md:items-start justify-between gap-4 p-4 border transition ${
+              className={`overflow-hidden rounded-2xl border shadow-sm transition ${
                 isAttended
-                  ? 'border-ochre-300 bg-ochre-50/20'
+                  ? 'border-ochre-300 bg-ochre-50/30'
                   : isCancelled || isNoShow
-                  ? 'border-stone-200 bg-stone-50/70 opacity-80'
-                  : 'border-stone-200 bg-white hover:border-brand-300 shadow-xs'
+                    ? 'border-abaca-200 bg-canvas/70'
+                    : 'border-abaca-200/80 bg-white/95 hover:border-ochre-300 hover:shadow-md'
               }`}
             >
               {/* Left Column: Workshop & Attendee Information */}
-              <div className="space-y-2 flex-1">
+              <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 flex-1 space-y-3">
                 {/* Header row: Product Title & Ticket Badge */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-stone-900 text-base">
+                  <h3 className="font-serif font-bold text-brand-900 text-base">
                     {b.product}
                   </h3>
                   <span className="text-xs font-semibold text-stone-500">× {b.quantity}</span>
 
                   {isBundle && (
-                    <span className="badge bg-ochre-100 text-ochre-900 border border-ochre-300 text-[11px] font-bold">
-                      Craft + Workshop Bundle
+                    <span className="badge border border-ochre-300 bg-ochre-100 text-[11px] font-bold text-ochre-900">
+                      Craft &amp; workshop bundle
                     </span>
                   )}
 
                   {b.ticket && (
-                    <span className="rounded-md bg-brand-100 px-2 py-0.5 font-mono text-xs font-bold text-brand-800 border border-brand-200">
-                       {b.ticket}
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-abaca-200 bg-canvas px-2.5 py-1 font-mono text-xs font-bold text-brand-800">
+                      <Ticket size={13} aria-hidden="true" />
+                      {b.ticket}
                     </span>
                   )}
                 </div>
 
                 {/* Attendee & Contact Details */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-700">
-                  <span className="font-bold text-stone-900 flex items-center gap-1">
-                    <span>Attendee:</span>
-                    <span className="underline decoration-stone-300">{b.attendee || b.customer}</span>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-stone-700">
+                  <span className="inline-flex items-center gap-2 font-semibold text-stone-900">
+                    <UserRound size={15} aria-hidden="true" className="text-ochre-800" />
+                    <span>{b.attendee || b.customer}</span>
                   </span>
                   {b.attendee_for === 'others' && (
-                    <span className="rounded-full bg-ochre-100 border border-ochre-300 px-2 py-0.5 text-[10px] font-bold text-ochre-900">
+                    <span className="badge border border-ochre-300 bg-ochre-100 text-[10px] text-ochre-900">
                       Guest / Group
                     </span>
                   )}
                   {b.attendee && b.attendee !== b.customer && (
-                    <span className="text-stone-500">
-                      (Booked by {b.customer})
+                    <span className="text-xs text-stone-500">
+                      Booked by {b.customer}
                     </span>
                   )}
                   {b.attendee_contact && (
                     <a
                       href={`tel:${b.attendee_contact}`}
-                      className="text-brand-700 font-medium hover:underline flex items-center gap-1"
+                      className="inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-brand-700 hover:bg-ochre-50 hover:underline"
                     >
-                      <span></span>
+                      <Users size={14} aria-hidden="true" />
                       <span>{b.attendee_contact}</span>
                     </a>
                   )}
                 </div>
 
                 {/* Scheduled Session Date & Location */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-600 bg-stone-50/90 rounded-lg p-2.5 border border-stone-200">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-abaca-200/70 bg-canvas/70 p-3 text-xs text-stone-600">
                   {b.session_date && (
-                    <span className="font-medium text-stone-800 flex items-center gap-1">
-                      <span></span>
+                    <span className="inline-flex items-center gap-2 font-semibold text-stone-800">
+                      <CalendarDays size={15} aria-hidden="true" className="text-ochre-800" />
                       <span>{b.session_date}</span>
                       {b.session_time && <span className="text-stone-500 font-normal">({b.session_time})</span>}
                     </span>
                   )}
                   {b.session_location && (
-                    <span className="flex items-center gap-1 text-charcoal-900 font-semibold truncate max-w-md">
-                      <span></span>
-                      <span>{b.session_location}</span>
+                    <span className="inline-flex min-w-0 items-center gap-2 font-medium text-stone-700">
+                      <MapPin size={15} aria-hidden="true" className="shrink-0 text-ochre-800" />
+                      <span className="truncate">{b.session_location}</span>
                     </span>
                   )}
                 </div>
 
                 {/* Craft Variant (If Bundle or customized craft) */}
                 {b.selected_variant && (
-                  <p className="text-xs text-ochre-900 bg-ochre-50 rounded px-2 py-1 inline-block border border-ochre-300">
-                    <b>Craft Variant to Prepare:</b> {b.selected_variant}
+                  <p className="inline-block rounded-lg border border-ochre-300 bg-ochre-50 px-3 py-2 text-xs text-ochre-900">
+                    <b>Craft variation to prepare:</b> {b.selected_variant}
                   </p>
                 )}
 
                 {/* Special Request / Customer Notes */}
                 {b.order_notes && (
-                  <p className="text-xs text-stone-600 italic bg-stone-50/60 rounded px-2 py-1 border border-stone-200">
-                    💬 <b>Note from Customer:</b> &ldquo;{b.order_notes}&rdquo;
+                  <p className="rounded-lg border border-abaca-200 bg-white/80 px-3 py-2 text-xs italic leading-5 text-stone-600">
+                    <b className="not-italic text-stone-800">Note from customer:</b> &ldquo;{b.order_notes}&rdquo;
                   </p>
                 )}
-              </div>
 
               {/* Right Column: Status & Action Buttons */}
-              <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-start gap-2.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-stone-100">
+                </div>
+              <div className="flex shrink-0 flex-col items-start gap-3 border-t border-abaca-100 pt-4 lg:min-w-[220px] lg:items-end lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
                 {/* Status Badge */}
                 <span
-                  className={`badge uppercase font-bold text-[10px] tracking-wider px-2.5 py-1 ${
+                  className={`badge border uppercase font-bold text-[10px] tracking-wider px-2.5 py-1 ${
                     isAttended
-                      ? 'bg-charcoal-900 text-ochre-300 border border-ochre-400'
+                      ? 'border-green-300 bg-green-50 text-green-800'
                       : isCancelled
-                      ? 'bg-red-100 text-red-800'
+                      ? 'border-red-200 bg-red-50 text-red-800'
                       : isNoShow
-                      ? 'bg-stone-200 text-stone-800'
-                      : 'bg-ochre-100 text-ochre-900 border border-ochre-300 font-semibold'
+                      ? 'border-stone-200 bg-stone-100 text-stone-700'
+                      : 'border-ochre-300 bg-ochre-100 text-ochre-900 font-semibold'
                   }`}
                 >
-                  {isAttended ? '✓ Checked In (Attended)' : b.status.replace(/_/g, ' ')}
+                  {isAttended ? 'Checked in' : b.status.replace(/_/g, ' ')}
                 </span>
 
                 {/* Interactive Action Buttons */}
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap gap-2 lg:justify-end">
                   {!isAttended && !isCancelled && (
                     <button
                       type="button"
                       disabled={isBusy}
                       onClick={() => setStatus(b.order_item_id, 'attended')}
-                      className="btn-primary text-xs px-3 py-1.5 font-bold shadow-xs bg-crimson-600 hover:bg-crimson-700 text-white"
+                      className="btn-primary min-h-10 px-3 text-xs"
                       title="Mark attendee as checked in and present at the workshop"
                     >
-                      {isBusy ? 'Checking in…' : '✅ Check In (Present)'}
+                      <CircleCheck size={15} aria-hidden="true" />
+                      {isBusy ? 'Updating…' : 'Check in'}
                     </button>
                   )}
 
@@ -347,10 +368,10 @@ export default function BookingsClient({ initial }: { initial: BookingRow[] }) {
                       type="button"
                       disabled={isBusy}
                       onClick={() => setStatus(b.order_item_id, 'pending')}
-                      className="btn-outline text-[11px] px-2.5 py-1 text-stone-500 hover:text-stone-700"
+                      className="btn-outline min-h-10 px-3 text-xs"
                       title="Undo check-in"
                     >
-                      Undo
+                      Undo check-in
                     </button>
                   )}
 
@@ -360,47 +381,56 @@ export default function BookingsClient({ initial }: { initial: BookingRow[] }) {
                         type="button"
                         disabled={isBusy}
                         onClick={() => setStatus(b.order_item_id, 'no_show')}
-                        className="btn-outline text-xs px-2.5 py-1.5 text-stone-600 hover:bg-stone-100"
+                        className="btn-outline min-h-10 px-3 text-xs"
                         title="Mark as absent / did not show up"
                       >
-                        No-show
+                        Mark no-show
                       </button>
                       <button
                         type="button"
                         disabled={isBusy}
                         onClick={() => setStatus(b.order_item_id, 'cancelled')}
-                        className="btn-outline text-xs px-2.5 py-1.5 text-red-600 border-red-200 hover:bg-red-50"
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                         title="Cancel this booking"
                       >
-                        Cancel
+                        Cancel booking
                       </button>
                     </>
                   )}
 
                   <Link
                     href={`/artisan/tutorial-attendees/${b.product_id}`}
-                    className="btn-outline text-xs px-2.5 py-1.5 text-stone-700"
+                    className="btn-outline min-h-10 px-3 text-xs"
                   >
-                    👥 Roster
+                    <Users size={14} aria-hidden="true" />
+                    Roster
                   </Link>
                 </div>
               </div>
-            </div>
+              </div>
+            </article>
           );
         })}
 
         {filtered.length === 0 && (
-          <div className="card p-8 text-center text-stone-500 bg-stone-50 border border-stone-200">
-            <span className="text-3xl">🔍</span>
-            <p className="mt-2 font-medium text-stone-700">No matching workshop bookings found</p>
+          <div className="rounded-2xl border border-abaca-200/80 bg-white/90 px-6 py-10 text-center shadow-sm">
+            <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-ochre-50 text-ochre-800">
+              <Search size={23} aria-hidden="true" />
+            </span>
+            <p className="mt-4 font-serif text-lg font-bold text-brand-900">No matching workshop bookings</p>
             {search ? (
-              <p className="text-xs text-stone-500 mt-1">
+              <p className="mt-1 text-sm text-stone-500">
                 No tickets or attendees match &ldquo;{search}&rdquo;. Try another name or clear your search.
               </p>
             ) : (
-              <p className="text-xs text-stone-500 mt-1">
+              <p className="mt-1 text-sm text-stone-500">
                 You do not have any bookings in this status tab.
               </p>
+            )}
+            {search && (
+              <button type="button" className="btn-outline mt-4 min-h-10" onClick={() => setSearch('')}>
+                Clear search
+              </button>
             )}
           </div>
         )}

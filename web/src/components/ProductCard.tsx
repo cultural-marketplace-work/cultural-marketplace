@@ -3,15 +3,17 @@ import Image from 'next/image';
 import type { Product } from '@/lib/types';
 
 export default function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
+  const cardImage = product.image_path ?? (product.has_tutorial ? product.tutorial_gallery?.[0] : null) ?? null;
+
   return (
     <Link
       href={`/customer/browse/${product.id}`}
       className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-[#E6DDC8] bg-[#FFFDF6] shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-ochre-400 hover:shadow-md"
     >
       <div className="relative aspect-[3/2] w-full overflow-hidden bg-abaca-100/60">
-        {product.image_path ? (
+        {cardImage ? (
           <Image
-            src={product.image_path}
+            src={cardImage}
             alt={product.name}
             width={640}
             height={360}
@@ -45,9 +47,9 @@ export default function ProductCard({ product, priority = false }: { product: Pr
             {product.name}
           </h3>
 
-          {(product.category || product.materials_used) && (
+          {(product.tutorial_details?.category || product.category || product.materials_used) && (
             <p className="mt-0.5 line-clamp-1 text-[10px] font-medium text-[#C5832B]">
-              {product.category || product.materials_used}
+              {product.tutorial_details?.category || product.category || product.materials_used}
             </p>
           )}
 

@@ -96,6 +96,18 @@ export default function ProductDetailClient({ product, loggedIn }: { product: Pr
   const toast = useToast();
 
   const variations = product.variations_data ?? [];
+  const tutorialDetails = product.tutorial_details;
+  const maximumWorkshopCapacity = product.tutorial_capacity ?? 10;
+  const sessionCapacity = (index: number) => Math.min(
+    maximumWorkshopCapacity,
+    product.tutorial_dates?.[index]?.available_slots ?? maximumWorkshopCapacity
+  );
+  const selectedSessionCapacity = sessionCapacity(session);
+  function selectSession(index: number) {
+    setSession(index);
+    setQty((current) => Math.min(current, Math.max(1, sessionCapacity(index))));
+  }
+
   const grouped = variations.reduce<Record<string, typeof variations>>((acc, v) => {
     (acc[v.typeLabel] ??= []).push(v);
     return acc;
@@ -431,6 +443,55 @@ export default function ProductDetailClient({ product, loggedIn }: { product: Pr
             </span>
           </div>
 
+          {tutorialDetails && (
+            <details className="rounded-xl border border-ochre-200 bg-white p-4">
+              <summary className="cursor-pointer text-sm font-bold text-brand-900">
+                Tutorial information, venue, and policies
+              </summary>
+              <div className="mt-4 space-y-3 text-xs leading-5 text-stone-700">
+                <p>
+                  {tutorialDetails.category} · {tutorialDetails.skill_level} · {tutorialDetails.duration_minutes} minutes
+                </p>
+                <p>
+                  <strong>Participants:</strong> {tutorialDetails.minimum_participants
+                    ? `${tutorialDetails.minimum_participants}–${product.tutorial_capacity ?? 'unlimited'}`
+                    : `Up to ${product.tutorial_capacity ?? 'unlimited'}`}
+                </p>
+                {!!product.tutorial_learnings?.length && (
+                  <div>
+                    <strong>Learning outcomes:</strong>
+                    <ul className="ml-5 list-disc">
+                      {product.tutorial_learnings.map((outcome, index) => <li key={`${outcome}-${index}`}>{outcome}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <p><strong>Languages:</strong> {tutorialDetails.languages.join(', ')}</p>
+                <p><strong>Materials:</strong> {{
+                  all: 'All materials provided',
+                  some: 'Some materials provided',
+                  bring_own: 'Participants bring their own',
+                }[tutorialDetails.materials_provided]}</p>
+                <p><strong>What to bring:</strong> {tutorialDetails.materials_requirements}</p>
+                <p><strong>Participants receive:</strong> {tutorialDetails.participants_receive}</p>
+                <p>
+                  <strong>Venue:</strong> {[
+                    tutorialDetails.venue_name,
+                    tutorialDetails.complete_address,
+                    tutorialDetails.barangay,
+                    tutorialDetails.municipality,
+                    tutorialDetails.province,
+                  ].filter(Boolean).join(', ')}
+                  {tutorialDetails.landmark && ` · Near ${tutorialDetails.landmark}`}
+                </p>
+                {tutorialDetails.fee_inclusion && <p><strong>Fee includes:</strong> {tutorialDetails.fee_inclusion}</p>}
+                {tutorialDetails.cancellation_policy && <p><strong>Cancellation:</strong> {tutorialDetails.cancellation_policy}</p>}
+                {tutorialDetails.refund_policy && <p><strong>Refunds:</strong> {tutorialDetails.refund_policy}</p>}
+                {tutorialDetails.attendance_instructions && <p><strong>Before attending:</strong> {tutorialDetails.attendance_instructions}</p>}
+                {tutorialDetails.additional_notes && <p><strong>Additional notes:</strong> {tutorialDetails.additional_notes}</p>}
+              </div>
+            </details>
+          )}
+
           {/* Session Date Selection */}
           {product.tutorial_dates && product.tutorial_dates.length > 0 ? (
             <div className="space-y-2">
@@ -452,12 +513,18 @@ export default function ProductDetailClient({ product, loggedIn }: { product: Pr
                       name="session"
                       className="mt-1 accent-crimson-600"
                       checked={session === i}
-                      onChange={() => setSession(i)}
+                      onChange={() => selectSession(i)}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-charcoal-900 text-sm">📅 {d.date}</p>
                       <p className="text-stone-600 font-medium mt-0.5">🕒 {d.time_start} – {d.time_end}</p>
                       {d.location && <p className="text-stone-500 text-[11px] mt-0.5 truncate">📍 {d.location}</p>}
+                      {d.available_slots != null && (
+                        <p className="text-stone-500 text-[11px] mt-0.5">
+                          {d.available_slots} available slots
+                          {d.registration_deadline && ` · Book by ${d.registration_deadline}`}
+                        </p>
+                      )}
                     </div>
                     {session === i && (
                       <span className="text-[10px] font-bold text-ochre-900 bg-ochre-100 px-2 py-0.5 rounded border border-ochre-300">
@@ -478,10 +545,10 @@ export default function ProductDetailClient({ product, loggedIn }: { product: Pr
           <QuantityStepper
             value={qty}
             min={1}
-            max={product.tutorial_capacity ?? 10}
+            max={selectedSessionCapacity}
             onChange={handleQtyChange}
             label="Attendee Seats"
-            stockLabel={`Maximum ${product.tutorial_capacity ?? 10} attendees allowed per session`}
+            stockLabel={`Maximum ${selectedSessionCapacity} attendees allowed for this session`}
           />
 
           {/* Attendee Details: For Self vs Others */}
@@ -647,7 +714,7 @@ export default function ProductDetailClient({ product, loggedIn }: { product: Pr
                       name="bundle_session"
                       className="mt-1 accent-ochre-600"
                       checked={session === i}
-                      onChange={() => setSession(i)}
+                      onChange={() => selectSession(i)}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-charcoal-900">📅 {d.date}</p>
@@ -729,10 +796,10 @@ export default function ProductDetailClient({ product, loggedIn }: { product: Pr
           <QuantityStepper
             value={qty}
             min={1}
-            max={Math.min(Math.max(1, product.stock_quantity), product.tutorial_capacity ?? 10)}
+            max={Math.min(Math.max(1, product.stock_quantity), selectedSessionCapacity)}
             onChange={handleQtyChange}
             label="Bundle Quantity / Seats"
-            stockLabel={`Limited to ${Math.min(product.stock_quantity, product.tutorial_capacity ?? 10)} bundles`}
+            stockLabel={`Limited to ${Math.min(product.stock_quantity, selectedSessionCapacity)} bundles`}
           />
 
           <div className="flex flex-wrap items-center gap-3 pt-2">

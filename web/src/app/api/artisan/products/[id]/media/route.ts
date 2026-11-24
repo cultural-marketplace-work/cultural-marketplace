@@ -44,11 +44,14 @@ export async function POST(req: Request) {
   try {
     const form = await req.formData();
     const productId = Number(form.get('productId'));
-    const kind = String(form.get('kind') ?? 'main'); // 'main' | 'gallery'
+    const kind = String(form.get('kind') ?? 'main');
     const file = form.get('file') as File | null;
 
     if (!productId || !file) {
       return NextResponse.json({ status: 'error', message: 'productId and file are required.' }, { status: 400 });
+    }
+    if (!['main', 'gallery', 'tutorial'].includes(kind)) {
+      return NextResponse.json({ status: 'error', message: 'Choose a valid image type.' }, { status: 400 });
     }
     if (!ALLOWED.includes(file.type)) {
       return NextResponse.json({ status: 'error', message: 'Only JPEG, PNG, or WebP images are allowed.' }, { status: 415 });
@@ -91,35 +94,57 @@ export async function POST(req: Request) {
     const { sql, usingPg } = await import('@/lib/dbPg');
     const { invalidate } = await import('@/lib/cache');
 
-    // Fetch fresh database state directly to prevent stale cached image_path from overwriting main image
+    // Fetch fresh database state directly to prevent stale cached image_path from overwriting main image.
     const currentRows = usingPg
-      ? await sql`select image_path, product_gallery from products where id = ${productId}`
-      : [{ image_path: product.image_path, product_gallery: product.product_gallery }];
+      ? await sql`select image_path, product_gallery, tutorial_gallery from products where id = ${productId}`
+      : [{
+          image_path: product.image_path,
+          product_gallery: product.product_gallery,
+          tutorial_gallery: product.tutorial_gallery,
+        }];
 
     let new_image_path = (currentRows[0]?.image_path as string) ?? null;
-    let new_gallery: string[] = parseGallery(
-  currentRows[0]?.product_gallery
-);
+    let new_gallery = parseGallery(currentRows[0]?.product_gallery);
+    let new_tutorial_gallery = parseGallery(currentRows[0]?.tutorial_gallery);
 
     if (kind === 'main') {
       new_image_path = publicUrl;
+    } else if (kind === 'tutorial') {
+      new_tutorial_gallery = [
+        publicUrl,
+        ...new_tutorial_gallery.slice(1).filter((url) => url !== publicUrl),
+      ];
     } else {
       if (!new_gallery.includes(publicUrl)) new_gallery.push(publicUrl);
-      new_gallery = new_gallery.slice(0, 20); // support up to 20 gallery images
+      new_gallery = new_gallery.slice(0, 20);
     }
 
     if (usingPg) {
-      const updated = await sql`
-        update products
-        set image_path = ${new_image_path}, product_gallery = ${JSON.stringify(new_gallery)}::jsonb
-        where id = ${productId}
-        returning image_path, product_gallery
-      `;
-      new_image_path = (updated[0]?.image_path as string) ?? null;
-      new_gallery = parseGallery(updated[0]?.product_gallery);
+      if (kind === 'tutorial') {
+        const updated = await sql`
+          update products
+          set tutorial_gallery = ${JSON.stringify(new_tutorial_gallery)}::jsonb
+          where id = ${productId}
+          returning tutorial_gallery
+        `;
+        new_tutorial_gallery = parseGallery(updated[0]?.tutorial_gallery);
+      } else {
+        const updated = await sql`
+          update products
+          set image_path = ${new_image_path}, product_gallery = ${JSON.stringify(new_gallery)}::jsonb
+          where id = ${productId}
+          returning image_path, product_gallery
+        `;
+        new_image_path = (updated[0]?.image_path as string) ?? null;
+        new_gallery = parseGallery(updated[0]?.product_gallery);
+      }
     } else {
-      const { updateProductMediaDemo } = await import('@/lib/db');
-      updateProductMediaDemo(productId, new_image_path, new_gallery);
+      const { updateProductMediaDemo, updateTutorialMediaDemo } = await import('@/lib/db');
+      if (kind === 'tutorial') {
+        updateTutorialMediaDemo(productId, new_tutorial_gallery);
+      } else {
+        updateProductMediaDemo(productId, new_image_path, new_gallery);
+      }
     }
 
     // Invalidate product caches so fresh images are immediately served everywhere
@@ -130,6 +155,7 @@ export async function POST(req: Request) {
       status: 'success',
       image_path: new_image_path,
       product_gallery: new_gallery,
+      tutorial_gallery: new_tutorial_gallery,
       url: publicUrl,
     });
   } catch (e) {

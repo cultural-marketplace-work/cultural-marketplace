@@ -57,9 +57,31 @@ export async function POST(req: Request) {
     for (const i of items) {
       const p = i.product!;
       if (i.purchase_type === 'workshop') {
+        const selectedSession = i.selected_session;
+        const scheduledSession = p.tutorial_dates?.find((session) => (
+          session.date === selectedSession?.date
+          && session.time_start === selectedSession?.time_start
+          && session.time_end === selectedSession?.time_end
+        ));
+        if (p.tutorial_dates?.length && !scheduledSession) {
+          return NextResponse.json(
+            { status: 'error', message: `Choose an available session for tutorial “${p.name}”.` },
+            { status: 409 }
+          );
+        }
+        if (scheduledSession?.registration_deadline) {
+          const deadline = new Date(`${scheduledSession.registration_deadline}T23:59:59+08:00`);
+          if (Date.now() > deadline.getTime()) {
+            return NextResponse.json(
+              { status: 'error', message: `Registration for tutorial “${p.name}” has closed.` },
+              { status: 409 }
+            );
+          }
+        }
         if (p.tutorial_capacity !== null && p.tutorial_capacity > 0) {
-          const booked = await getBookedSeatsCount(p.id);
-          const available = p.tutorial_capacity - booked;
+          const booked = await getBookedSeatsCount(p.id, scheduledSession);
+          const sessionCapacity = scheduledSession?.available_slots ?? p.tutorial_capacity;
+          const available = Math.min(p.tutorial_capacity, sessionCapacity) - booked;
           if (available < i.quantity) {
             return NextResponse.json(
               {

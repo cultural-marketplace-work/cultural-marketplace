@@ -22,12 +22,15 @@ export default async function NewProductMediaPage({ params }: { params: Promise<
       <main className="mx-auto max-w-3xl px-4 py-10">
         <h1 className="font-serif text-3xl font-bold text-brand-900">Add photos to “{product.name}”</h1>
         <p className="mt-1 text-stone-500">
-          Buyers are far more likely to order when they can see the craft. You can always change these later.
+          Add photos now. Next, you can set up a tutorial as the final step. You can always change your photos later.
         </p>
         <ProductMedia productId={product.id} initialMain={product.image_path} initialGallery={product.product_gallery} />
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          <Link href="/artisan/products" className="btn-primary px-6 py-2.5">
-            Done — go to my products
+          <Link href={`/artisan/products/${product.id}/tutorial-option`} className="btn-primary px-6 py-2.5">
+            Continue to tutorial setup
+          </Link>
+          <Link href="/artisan/products" className="btn-outline px-6 py-2.5">
+            Skip tutorial and finish
           </Link>
           <Link href={`/artisan/products/${product.id}/nfc`} className="btn-outline px-6 py-2.5">
             🏷️ Add an NFC tag (optional)

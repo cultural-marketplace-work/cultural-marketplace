@@ -65,7 +65,7 @@ Phase tags: **P0** foundation · **P1** auth · **P2** marketplace · **P3** car
 |---|---|---|
 | `GET /artisan/dashboard` | `/artisan/dashboard` | P5 |
 | `GET /artisan/products` | `/artisan/products` | P5 |
-| `GET+POST /artisan/products/add|store` | `/artisan/products/new` + `POST /api/artisan/products` | P5 |
+| `GET+POST /artisan/products/add|store` | `/artisan/products/new` + `POST /api/artisan/products` → `/artisan/products/[id]/media-setup` → optional `/artisan/products/[id]/tutorial-option` → `/artisan/products/[id]/tutorial` | P5 |
 | `GET+POST /artisan/products/edit|update/(:num)` | `/artisan/products/[id]/edit` + `PUT /api/artisan/products/[id]` | P5 |
 | `POST /artisan/products/toggle/(:num)` | `POST /api/artisan/products/[id]/toggle` | P5 |
 | `GET+POST nfc-setup|register-nfc` | `/artisan/products/[id]/nfc` + `POST /api/artisan/products/[id]/nfc` | P5 |

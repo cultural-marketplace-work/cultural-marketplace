@@ -34,13 +34,14 @@ export default async function ArtisanDashboard() {
   const profile = await getArtisan(session.id);
   const { t } = await getArtisanTranslator(session.id);
   const isVerified = profile?.verification_status === 'approved';
-  const [products, orders, notifications] = isVerified
+  const [products, orderRows, notifications] = isVerified
     ? await Promise.all([
         listArtisanProducts(session.id),
         listArtisanOrders(session.id),
         listNotifications(session.id, 'artisan'),
       ])
     : [[], [], []];
+  const orders = orderRows.filter((order) => order.purchase_type === 'product');
   const pendingOrders = orders.filter((order) => order.status === 'pending');
   const unread = notifications.filter((notification) => !notification.is_read).length;
   const displayName = profile?.business_name || profile?.name || session.name;
