@@ -514,6 +514,7 @@ export default function ProductForm({
         </div>
       </section>
 
+      {mode === 'edit' && (
       <section className="overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/95 shadow-sm">
         <div className="flex flex-col gap-4 bg-gradient-to-r from-[#fffaf0] to-white p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
           <div className="flex items-start gap-3">
@@ -714,11 +715,12 @@ export default function ProductForm({
           </div>
         )}
       </section>
+      )}
 
       <div className="flex flex-col gap-3 rounded-2xl border border-abaca-200/80 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <p className="text-xs leading-5 text-stone-500">
           {mode === 'create'
-            ? 'After saving, you can add photos and an NFC authenticity tag.'
+            ? 'After saving, you can add a tutorial, then add photos and an NFC authenticity tag.'
             : 'Your changes will appear on your marketplace listing.'}
         </p>
         <button
@@ -727,7 +729,7 @@ export default function ProductForm({
           type="submit"
         >
           {busy ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Save size={17} aria-hidden="true" />}
-          {busy ? 'Saving…' : mode === 'create' ? 'Save and add photos' : 'Save changes'}
+          {busy ? 'Saving…' : mode === 'create' ? 'Save product' : 'Save changes'}
         </button>
       </div>
     </form>

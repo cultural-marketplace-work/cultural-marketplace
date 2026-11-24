@@ -17,6 +17,16 @@ import {
   Users,
 } from 'lucide-react';
 
+interface ExperienceAttendee {
+  order_item_id: number;
+  attendee_name: string | null;
+  customer_name: string;
+  quantity: number;
+  status: string;
+  ticket_code: string | null;
+  selected_session: { date: string; time_start: string; time_end: string } | null;
+}
+
 export interface ExperienceRow {
   id: number;
   name: string;
@@ -29,6 +39,7 @@ export interface ExperienceRow {
   lat: number | null;
   lng: number | null;
   dates: Array<{ date: string; time_start: string; time_end: string; location?: string }>;
+  attendees: ExperienceAttendee[];
 }
 
 type Filter = 'all' | 'needs_dates' | 'sold_out';
@@ -39,6 +50,7 @@ export default function ExperiencesClient({ initial }: { initial: ExperienceRow[
   const [saveStatus, setSaveStatus] = useState<Record<number, { type: 'success' | 'error'; message: string }>>({});
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [expandedAttendees, setExpandedAttendees] = useState<Record<string, boolean>>({});
 
   const summary = useMemo(() => ({
     workshops: rows.length,
@@ -174,6 +186,13 @@ export default function ExperiencesClient({ initial }: { initial: ExperienceRow[
         const statusMessage = saveStatus[row.id];
         const isFull = row.capacity !== null && row.booked_count >= row.capacity;
         const seatsLeft = row.capacity !== null ? Math.max(0, row.capacity - row.booked_count) : null;
+        const unmatchedAttendees = row.attendees.filter((attendee) => (
+          !attendee.selected_session || !row.dates.some((date) => (
+            date.date === attendee.selected_session?.date
+            && date.time_start === attendee.selected_session?.time_start
+            && date.time_end === attendee.selected_session?.time_end
+          ))
+        ));
 
         return (
           <article key={row.id} className="overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/95 shadow-sm">
@@ -291,12 +310,16 @@ export default function ExperiencesClient({ initial }: { initial: ExperienceRow[
                 <div className="space-y-3">
                   {row.dates.map((date, index) => {
                     const datePrefix = `workshop-${row.id}-session-${index}`;
+                    const sessionAttendees = row.attendees.filter((attendee) => (
+                      attendee.selected_session?.date === date.date
+                      && attendee.selected_session.time_start === date.time_start
+                      && attendee.selected_session.time_end === date.time_end
+                    ));
+                    const sessionSeats = sessionAttendees.reduce((total, attendee) => total + attendee.quantity, 0);
                     return (
-                      <fieldset
-                        key={`${row.id}-${index}`}
-                        className="grid gap-3 rounded-xl border border-abaca-200 bg-canvas/50 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_0.8fr_0.8fr_1.5fr_auto] lg:items-end"
-                      >
-                        <legend className="sr-only">Session {index + 1}</legend>
+                      <div key={`${row.id}-${index}`} className="space-y-2">
+                        <fieldset className="grid gap-3 rounded-xl border border-abaca-200 bg-canvas/50 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_0.8fr_0.8fr_1.5fr_auto] lg:items-end">
+                          <legend className="sr-only">Session {index + 1}</legend>
                         <div>
                           <label htmlFor={`${datePrefix}-date`} className="mb-1.5 block text-xs font-semibold text-stone-600">Date</label>
                           <input
@@ -360,9 +383,71 @@ export default function ExperiencesClient({ initial }: { initial: ExperienceRow[
                           <Trash2 size={15} aria-hidden="true" />
                           <span className="lg:hidden">Remove</span>
                         </button>
-                      </fieldset>
+                        </fieldset>
+                        <div className="rounded-xl border border-abaca-200/80 bg-white/80 p-3">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs text-stone-500">
+                              {sessionSeats} {sessionSeats === 1 ? 'seat' : 'seats'} reserved for this session
+                            </p>
+                            <Link
+                              className="btn-outline min-h-9 px-3 text-xs"
+                              href={`/artisan/tutorial-attendees/${row.id}?date=${encodeURIComponent(date.date)}&start=${encodeURIComponent(date.time_start)}&end=${encodeURIComponent(date.time_end)}`}
+                            >
+                              <Users size={14} aria-hidden="true" />
+                              View attendees ({sessionSeats})
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
+                </div>
+              )}
+
+              {unmatchedAttendees.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-semibold text-amber-900">Bookings without a matching scheduled time</h4>
+                      <p className="mt-1 text-xs leading-5 text-amber-800">
+                        These may refer to a session that was changed or removed.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-outline min-h-9 border-amber-300 bg-white/70 px-3 text-xs"
+                      aria-expanded={expandedAttendees[`${row.id}-unmatched`] ?? false}
+                      aria-controls={`workshop-${row.id}-unmatched-attendees`}
+                      onClick={() => setExpandedAttendees((current) => ({
+                        ...current,
+                        [`${row.id}-unmatched`]: !current[`${row.id}-unmatched`],
+                      }))}
+                    >
+                      <Users size={14} aria-hidden="true" />
+                      {expandedAttendees[`${row.id}-unmatched`] ? 'Hide bookings' : `View bookings (${unmatchedAttendees.length})`}
+                    </button>
+                  </div>
+                  <ul
+                    id={`workshop-${row.id}-unmatched-attendees`}
+                    hidden={!(expandedAttendees[`${row.id}-unmatched`] ?? false)}
+                    className="mt-2 divide-y divide-amber-200/70"
+                  >
+                    {unmatchedAttendees.map((attendee) => (
+                      <li key={attendee.order_item_id} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                        <div>
+                          <p className="text-sm font-semibold text-stone-800">{attendee.attendee_name || attendee.customer_name}</p>
+                          <p className="text-xs text-stone-600">
+                            {attendee.selected_session
+                              ? `${attendee.selected_session.date} · ${attendee.selected_session.time_start}–${attendee.selected_session.time_end}`
+                              : `Booked by ${attendee.customer_name} · No session time recorded`}
+                          </p>
+                        </div>
+                        <span className="badge border border-amber-200 bg-white/70 capitalize text-amber-900">
+                          {attendee.status.replace(/_/g, ' ')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

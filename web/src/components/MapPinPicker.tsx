@@ -35,6 +35,7 @@ export default function MapPinPicker({
   const mapInstanceRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const markerRef = useRef<any>(null);
+  const latestInitialPositionRef = useRef({ lat: initialLat, lng: initialLng });
 
   const defaultLat = initialLat ?? 8.1752;
   const defaultLng = initialLng ?? 125.9934;
@@ -48,6 +49,10 @@ export default function MapPinPicker({
   const [reverseLoading, setReverseLoading] = useState(false);
 
   useEffect(() => {
+    latestInitialPositionRef.current = { lat: initialLat, lng: initialLng };
+  }, [initialLat, initialLng]);
+
+  useEffect(() => {
     let isMounted = true;
 
     async function initMap() {
@@ -57,8 +62,11 @@ export default function MapPinPicker({
 
       if (!isMounted || !mapContainerRef.current) return;
 
+      const initialPosition = latestInitialPositionRef.current;
+      const centerLat = initialPosition.lat ?? coords.lat;
+      const centerLng = initialPosition.lng ?? coords.lng;
       const map = L.map(mapContainerRef.current, {
-        center: [coords.lat, coords.lng],
+        center: [centerLat, centerLng],
         zoom: 14,
         zoomControl: true,
       });
@@ -82,7 +90,7 @@ export default function MapPinPicker({
         iconAnchor: [18, 36],
       });
 
-      const marker = L.marker([coords.lat, coords.lng], {
+      const marker = L.marker([centerLat, centerLng], {
         icon: customPin,
         draggable: true,
       }).addTo(map);
@@ -142,6 +150,15 @@ export default function MapPinPicker({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (initialLat == null || initialLng == null) return;
+    setCoords({ lat: initialLat, lng: initialLng });
+    if (mapInstanceRef.current && markerRef.current) {
+      mapInstanceRef.current.setView([initialLat, initialLng], 15);
+      markerRef.current.setLatLng([initialLat, initialLng]);
+    }
+  }, [initialLat, initialLng]);
 
   function handlePresetChange(presetIndex: number) {
     const p = AGUSAN_PRESETS[presetIndex];

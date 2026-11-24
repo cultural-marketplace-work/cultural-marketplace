@@ -4,35 +4,90 @@ import { getSession } from '@/lib/auth';
 import { requireVerifiedArtisan } from '@/lib/artisanAuth';
 import { getProduct, listAttendees } from '@/lib/db';
 import AttendeesClient from './AttendeesClient';
+import { ArrowLeft, CalendarDays, Sparkles } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
-export default async function TutorialAttendeesPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TutorialAttendeesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ date?: string | string[]; start?: string | string[]; end?: string | string[] }>;
+}) {
   const session = await getSession();
   if (!session || session.role !== 'artisan') redirect('/auth/login?next=/artisan/experiences');
   await requireVerifiedArtisan(session.id);
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
 
   const product = await getProduct(Number(id));
   if (!product || product.artisan_id !== session.id) notFound();
   const attendees = await listAttendees(session.id, product.id);
+  const selectedDate = typeof query.date === 'string' ? query.date : null;
+  const selectedStart = typeof query.start === 'string' ? query.start : null;
+  const selectedEnd = typeof query.end === 'string' ? query.end : null;
+  const selectedAttendees = selectedDate
+    ? attendees.filter((booking) => (
+        booking.selected_session?.date === selectedDate
+        && (!selectedStart || booking.selected_session.time_start === selectedStart)
+        && (!selectedEnd || booking.selected_session.time_end === selectedEnd)
+      ))
+    : attendees;
+  const sessionDate = selectedDate ? new Date(`${selectedDate}T12:00:00`) : null;
+  const sessionLabel = selectedDate
+    ? `${sessionDate && !Number.isNaN(sessionDate.getTime())
+        ? sessionDate.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+        : selectedDate}${selectedStart || selectedEnd ? ` · ${selectedStart ?? ''}${selectedStart && selectedEnd ? '–' : ''}${selectedEnd ?? ''}` : ''}`
+    : null;
 
   return (
-    <>
-      <main className="mx-auto max-w-3xl px-4 py-10">
-        <Link href="/artisan/bookings" className="text-sm font-medium text-brand-700 hover:underline">← Back to bookings</Link>
-        <h1 className="font-serif text-3xl font-bold text-brand-900 mt-2">Attendees — {product.name}</h1>
-        <AttendeesClient
-          initial={attendees.map((b) => ({
-            order_item_id: b.order_item_id,
-            customer: b.customer_name,
-            attendee: b.attendee_name,
-            attendee_for: b.attendee_for ?? 'self',
-            ticket: b.ticket_code,
-            status: b.status,
-          }))}
+    <main className="mx-auto max-w-7xl space-y-5">
+      <Link
+        href="/artisan/experiences"
+        className="inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-700 transition hover:bg-ochre-50 hover:text-brand-900"
+      >
+        <ArrowLeft size={16} aria-hidden="true" />
+        Back to Workshops &amp; Experiences
+      </Link>
+      <section className="relative isolate overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-[#4b1717] via-[#7f2422] to-[#9E2A2B] px-5 py-6 text-white shadow-lg sm:px-8 sm:py-8">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 opacity-[0.12]"
+          style={{ backgroundImage: "url('/images/kalinga-weave.svg')", backgroundSize: '240px' }}
         />
-      </main>
-    </>
+        <div aria-hidden="true" className="absolute -right-16 -top-24 -z-10 h-64 w-64 rounded-full border border-white/10" />
+        <div className="flex flex-wrap items-center justify-between gap-5">
+          <div className="max-w-2xl">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-ochre-200">
+              <Sparkles size={14} aria-hidden="true" />
+              Workshop attendance
+            </p>
+            <h1 className="mt-2 break-words font-serif text-3xl font-bold leading-tight sm:text-4xl">{product.name}</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-white/75 sm:text-base">
+              {sessionLabel
+                ? `Attendees booked for ${sessionLabel}.`
+                : 'Welcome each learner and keep track of who has arrived for this workshop.'}
+            </p>
+          </div>
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-ochre-200">
+            <CalendarDays size={26} strokeWidth={1.7} aria-hidden="true" />
+          </span>
+        </div>
+      </section>
+      <AttendeesClient
+        sessionLabel={sessionLabel}
+        initial={selectedAttendees.map((b) => ({
+          order_item_id: b.order_item_id,
+          customer: b.customer_name,
+          attendee: b.attendee_name,
+          attendee_for: b.attendee_for ?? 'self',
+          ticket: b.ticket_code,
+          status: b.status,
+          session_date: b.selected_session?.date ?? null,
+          session_start: b.selected_session?.time_start ?? null,
+          session_end: b.selected_session?.time_end ?? null,
+        }))}
+      />
+    </main>
   );
 }

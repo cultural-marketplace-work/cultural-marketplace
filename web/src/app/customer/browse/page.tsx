@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
@@ -106,9 +107,16 @@ const artisanById = new Map(artisans.map((a) => [a.id, a]));
           key={w.id}
           className="flex flex-col justify-between overflow-hidden rounded-2xl border border-abaca-200 bg-white shadow-2xs transition hover:border-ochre-400"
         >
-          {w.image_path && (
+          {(w.tutorial_gallery?.[0] || w.image_path) && (
             <Link href={`/customer/browse/${w.id}`}>
-              <img src={w.image_path} alt={w.name} className="h-40 w-full object-cover" />
+              <Image
+                src={w.tutorial_gallery?.[0] ?? w.image_path ?? ''}
+                alt={w.tutorial_title || w.name}
+                width={640}
+                height={320}
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="h-40 w-full object-cover"
+              />
             </Link>
           )}
 

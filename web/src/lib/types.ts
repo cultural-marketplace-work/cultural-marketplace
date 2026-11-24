@@ -113,6 +113,9 @@ export interface Product {
   tutorial_lng?: number | null;
   tutorial_fee_type: 'paid' | 'free' | null;
   tutorial_learnings: string[] | null;
+  tutorial_things_to_bring?: string | null;
+  tutorial_gallery?: string[] | null;
+  tutorial_details?: TutorialDetails | null;
   tutorial_status: 'accept_bookings' | 'draft' | null;
   materials_used: string | null;
   has_variations: boolean;
@@ -133,13 +136,39 @@ export interface TutorialDate {
   date: string;
   time_start: string;
   time_end: string;
+  available_slots?: number;
+  registration_deadline?: string;
   location?: string;
   venue_street?: string;
+  venue_province?: string;
   venue_barangay?: string;
   venue_municipality?: string;
   venue_meeting_place?: string;
+  venue_landmark?: string;
   lat?: string;
   lng?: string;
+}
+
+export interface TutorialDetails {
+  category: string;
+  duration_minutes: number;
+  skill_level: 'Beginner' | 'Intermediate' | 'Advanced';
+  minimum_participants: number | null;
+  languages: string[];
+  materials_provided: 'all' | 'some' | 'bring_own';
+  materials_requirements: string;
+  participants_receive: string;
+  venue_name: string;
+  province: string;
+  municipality: string;
+  barangay: string;
+  complete_address: string;
+  landmark: string;
+  fee_inclusion: string;
+  cancellation_policy: string;
+  refund_policy: string;
+  attendance_instructions: string;
+  additional_notes: string;
 }
 
 export interface Artisan {

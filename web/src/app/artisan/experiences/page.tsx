@@ -20,11 +20,34 @@ export default async function ArtisanExperiencesPage() {
 
   const tutorials = products.filter((p) => p.has_tutorial);
 
-  const bookingsByProduct = new Map<number, number>();
+  const bookingsByProduct = new Map<number, Array<{
+    order_item_id: number;
+    attendee_name: string | null;
+    customer_name: string;
+    quantity: number;
+    status: string;
+    ticket_code: string | null;
+    selected_session: { date: string; time_start: string; time_end: string } | null;
+  }>>();
   for (const b of bookings) {
-    if (b.status !== 'cancelled') {
-      bookingsByProduct.set(b.product_id, (bookingsByProduct.get(b.product_id) ?? 0) + b.quantity);
-    }
+    if (b.status === 'cancelled') continue;
+    const productBookings = bookingsByProduct.get(b.product_id) ?? [];
+    productBookings.push({
+      order_item_id: b.order_item_id,
+      attendee_name: b.attendee_name,
+      customer_name: b.customer_name,
+      quantity: b.quantity,
+      status: b.status,
+      ticket_code: b.ticket_code,
+      selected_session: b.selected_session
+        ? {
+            date: b.selected_session.date,
+            time_start: b.selected_session.time_start,
+            time_end: b.selected_session.time_end,
+          }
+        : null,
+    });
+    bookingsByProduct.set(b.product_id, productBookings);
   }
 
   return (
@@ -86,7 +109,8 @@ export default async function ArtisanExperiencesPage() {
           price: Number(p.tutorial_price ?? p.price),
           fee_type: p.tutorial_fee_type ?? (Number(p.tutorial_price) === 0 ? 'free' : 'paid'),
           capacity: p.tutorial_capacity,
-          booked_count: bookingsByProduct.get(p.id) ?? 0,
+          booked_count: (bookingsByProduct.get(p.id) ?? []).reduce((total, booking) => total + booking.quantity, 0),
+          attendees: bookingsByProduct.get(p.id) ?? [],
           status: p.tutorial_status ?? 'accept_bookings',
           location: p.tutorial_location ?? null,
           lat: p.tutorial_lat ?? null,

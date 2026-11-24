@@ -443,6 +443,7 @@ export async function listCategories(type?: 'product' | 'experience'): Promise<A
 }
 
 function mapProduct(r: Record<string, unknown>): Product {
+  const tutorialDetails = parseJsonish<Product['tutorial_details']>(r.tutorial_details);
   return {
     id: num(r.id), artisan_id: num(r.artisan_id), name: String(r.name), description: (r.description as string) ?? null,
     price: num(r.price), stock_quantity: num(r.stock_quantity), category: (r.category as string) ?? null,
@@ -459,6 +460,9 @@ function mapProduct(r: Record<string, unknown>): Product {
     tutorial_lng: r.tutorial_lng == null ? null : num(r.tutorial_lng),
     tutorial_fee_type: (r.tutorial_fee_type as Product['tutorial_fee_type']) ?? null,
     tutorial_learnings: (r.tutorial_learnings as string[] | null) ?? null,
+    tutorial_things_to_bring: (r.tutorial_things_to_bring as string | null) ?? null,
+    tutorial_gallery: parseJsonish<string[]>(r.tutorial_gallery),
+    tutorial_details: tutorialDetails && Object.keys(tutorialDetails).length > 0 ? tutorialDetails : null,
     tutorial_status: (r.tutorial_status as Product['tutorial_status']) ?? null,
     materials_used: (r.materials_used as string) ?? null,
     has_variations: Boolean(r.has_variations), variation_pricing: Boolean(r.variation_pricing),
@@ -590,6 +594,11 @@ export function updateProductMediaDemo(productId: number, imagePath: string | nu
   if (p) { p.image_path = imagePath; p.product_gallery = gallery; }
 }
 
+export function updateTutorialMediaDemo(productId: number, gallery: string[] | null): void {
+  const p = store!.products.find((x) => x.id === productId);
+  if (p) p.tutorial_gallery = gallery;
+}
+
 export async function getArtisanByEmail(email: string): Promise<Artisan | null> {
   if (usingPostgres) {
     const rows = await sql`select * from artisans where lower(email) = ${email.toLowerCase()} and account_deleted_at is null limit 1`;
@@ -675,13 +684,31 @@ export async function getCartCount(customerId: number): Promise<number> {
   }, 15_000);
 }
 
-export async function getBookedSeatsCount(productId: number): Promise<number> {
+export async function getBookedSeatsCount(
+  productId: number,
+  selectedSession?: { date: string; time_start: string; time_end: string }
+): Promise<number> {
   if (usingPostgres) {
-    const rows = await sql`select coalesce(sum(quantity), 0) as count from order_items where product_id = ${productId} and status <> 'cancelled' and status <> 'no_show'`;
+    const rows = selectedSession
+      ? await sql`select coalesce(sum(quantity), 0) as count from order_items
+          where product_id = ${productId} and status <> 'cancelled' and status <> 'no_show'
+          and selected_session->>'date' = ${selectedSession.date}
+          and selected_session->>'time_start' = ${selectedSession.time_start}
+          and selected_session->>'time_end' = ${selectedSession.time_end}`
+      : await sql`select coalesce(sum(quantity), 0) as count from order_items where product_id = ${productId} and status <> 'cancelled' and status <> 'no_show'`;
     return num(rows[0]?.count ?? 0);
   }
   return store!.order_items
-    .filter((x) => x.product_id === productId && x.status !== 'cancelled' && x.status !== 'no_show')
+    .filter((x) => (
+      x.product_id === productId
+      && x.status !== 'cancelled'
+      && x.status !== 'no_show'
+      && (!selectedSession || (
+        x.selected_session?.date === selectedSession.date
+        && x.selected_session?.time_start === selectedSession.time_start
+        && x.selected_session?.time_end === selectedSession.time_end
+      ))
+    ))
     .reduce((s, x) => s + x.quantity, 0);
 }
 
@@ -1914,6 +1941,9 @@ export async function updateProduct(artisanId: number, id: number, p: Partial<Pr
         tutorial_lng = coalesce(${p.tutorial_lng ?? null}, tutorial_lng),
         tutorial_dates = coalesce(${p.tutorial_dates !== undefined ? (p.tutorial_dates ? JSON.stringify(p.tutorial_dates) : null) : null}::jsonb, tutorial_dates),
         tutorial_fee_type = coalesce(${p.tutorial_fee_type ?? null}, tutorial_fee_type),
+        tutorial_learnings = coalesce(${p.tutorial_learnings !== undefined ? JSON.stringify(p.tutorial_learnings) : null}::jsonb, tutorial_learnings),
+        tutorial_things_to_bring = coalesce(${p.tutorial_things_to_bring ?? null}, tutorial_things_to_bring),
+        tutorial_details = coalesce(${p.tutorial_details !== undefined ? JSON.stringify(p.tutorial_details) : null}::jsonb, tutorial_details),
         has_variations = coalesce(${p.has_variations ?? null}, has_variations),
         variation_pricing = coalesce(${p.variation_pricing ?? null}, variation_pricing),
         variations_data = coalesce(${p.variations_data !== undefined ? (p.variations_data ? JSON.stringify(p.variations_data) : null) : null}::jsonb, variations_data),

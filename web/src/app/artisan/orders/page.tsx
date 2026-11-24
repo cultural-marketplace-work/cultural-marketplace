@@ -15,10 +15,11 @@ export default async function ArtisanOrdersPage() {
 
   // Parallel: orders + shipments fetched together (LCP — ~100ms per round-trip
   // to Supabase, and these are independent).
-  const [orders, shipmentRows] = await Promise.all([
+  const [orderRows, shipmentRows] = await Promise.all([
     listArtisanOrders(session.id),
     listShipmentsForArtisan(session.id),
   ]);
+  const orders = orderRows.filter((order) => order.purchase_type === 'product');
   const trackings = new Map<number, string>();
   for (const sh of shipmentRows) {
     trackings.set(sh.order_item_id, sh.tracking_number);
