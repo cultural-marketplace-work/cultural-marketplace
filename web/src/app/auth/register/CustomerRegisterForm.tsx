@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { LogoLoadingOverlay } from '@/components/LogoLoading';
 
 type FieldState = 'empty' | 'valid' | 'invalid';
 
@@ -40,6 +41,7 @@ export default function CustomerRegisterForm() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
 
   function set<K extends keyof typeof form>(
     k: K,
@@ -82,6 +84,7 @@ export default function CustomerRegisterForm() {
     }
 
     setBusy(true);
+    setLoadingMessage('Creating your account…');
     setError('');
 
     try {
@@ -102,6 +105,7 @@ export default function CustomerRegisterForm() {
       setError('Unable to connect. Please try again.');
     } finally {
       setBusy(false);
+      setLoadingMessage('');
     }
   }
 
@@ -110,6 +114,7 @@ export default function CustomerRegisterForm() {
     e.preventDefault();
 
     setBusy(true);
+    setLoadingMessage('Verifying your account…');
     setError('');
 
     try {
@@ -131,6 +136,7 @@ export default function CustomerRegisterForm() {
       setError('Unable to connect. Please try again.');
     } finally {
       setBusy(false);
+      setLoadingMessage('');
     }
   }
 
@@ -139,6 +145,7 @@ export default function CustomerRegisterForm() {
     setInfo('');
     setError('');
     setBusy(true);
+    setLoadingMessage('Sending a new verification code…');
 
     try {
       const res = await fetch('/api/auth/register-customer', {
@@ -158,6 +165,7 @@ export default function CustomerRegisterForm() {
       setError('Unable to connect. Please try again.');
     } finally {
       setBusy(false);
+      setLoadingMessage('');
     }
   }
 
@@ -167,7 +175,9 @@ export default function CustomerRegisterForm() {
       <form
         onSubmit={verifyOtp}
         className="mx-auto mt-4 w-full min-w-0 space-y-3"
+        aria-busy={busy}
       >
+        {busy && <LogoLoadingOverlay message={loadingMessage} />}
         <p className="break-words rounded-lg border border-ochre-200 bg-ochre-50 px-2 py-2 text-[8px] font-medium text-charcoal-900">
           We emailed a 6-digit code to <b>{form.email}</b>. It may take a minute to arrive.
         </p>
@@ -233,7 +243,9 @@ export default function CustomerRegisterForm() {
       onSubmit={submitDetails}
       className="mx-auto mt-4 w-full min-w-0 space-y-3"
       noValidate
+      aria-busy={busy}
     >
+      {busy && <LogoLoadingOverlay message={loadingMessage} />}
       {error && (
         <p className="rounded-lg bg-red-50 px-2 py-2 text-[8px] text-red-700">
           {error}
@@ -390,7 +402,6 @@ export default function CustomerRegisterForm() {
         {busy ? 'Creating your account…' : 'Continue'}
       </button>
 
-      
     </form>
   );
 }
