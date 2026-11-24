@@ -7,6 +7,7 @@ export default function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -72,6 +73,18 @@ export default function LoginForm() {
           required
         />
       </div>
+
+      <label htmlFor="login-policies" className="flex items-start gap-2 text-xs leading-5 text-stone-600">
+        <input
+          id="login-policies"
+          type="checkbox"
+          className="mt-1 h-4 w-4 shrink-0 accent-[#8B0000]"
+          checked={acceptedPolicies}
+          onChange={(e) => setAcceptedPolicies(e.target.checked)}
+          required
+        />
+        <span>I have read and agree to the Privacy Policy and Terms &amp; Conditions.</span>
+      </label>
 
       <button
         className="btn-primary w-full !h-11 !min-h-0 !rounded-md !bg-[#9E0000] !px-3 !py-0 text-sm font-bold hover:!bg-[#8B0000] disabled:opacity-60"
