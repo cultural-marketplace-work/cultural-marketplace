@@ -15,8 +15,8 @@ export interface ProfileInitialData {
 
 type ProfileMessage = { text: string; error?: boolean } | null;
 
-const labelClass = 'mb-1.5 block text-sm font-semibold text-stone-700';
-const fieldClass = 'input w-full rounded-xl';
+const labelClass = 'mb-1.5 block text-sm font-semibold text-[#3D3028]';
+const fieldClass = 'w-full rounded-xl border border-[#E8DCCB] bg-white px-3 py-2.5 text-sm text-[#3D3028] outline-none transition placeholder:text-[#A69B90] focus:border-[#B78B45] focus:ring-2 focus:ring-[#D6B56D]/20';
 
 export default function ProfileForm({ initial }: { initial: ProfileInitialData }) {
   const router = useRouter();
@@ -60,20 +60,20 @@ export default function ProfileForm({ initial }: { initial: ProfileInitialData }
 
   return (
     <form
-      className="overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/95 shadow-sm"
+      className="overflow-hidden rounded-2xl border border-[#E8DCCB] bg-white shadow-sm"
       onSubmit={(event) => {
         event.preventDefault();
         void save();
       }}
     >
-      <div className="border-b border-stone-100 bg-gradient-to-r from-[#fffaf0] to-white px-5 py-5 sm:px-7">
+      <div className="border-b border-[#F0E8DD] bg-gradient-to-r from-[#FFFDFA] to-white px-5 py-5 sm:px-7">
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ochre-50 text-ochre-800">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFF3DE] text-[#80500D]">
             <UserRound size={19} aria-hidden="true" />
           </span>
           <div>
-            <h2 className="font-serif text-xl font-bold text-brand-900">Personal details</h2>
-            <p className="mt-1 text-sm leading-5 text-stone-500">Keep your contact information current for orders and workshop bookings.</p>
+            <h2 className="font-serif text-xl font-bold text-[#3D3028]">Personal details</h2>
+            <p className="mt-1 text-sm leading-5 text-[#71675F]">Keep your contact information current for orders and workshop bookings.</p>
           </div>
         </div>
       </div>
@@ -85,11 +85,11 @@ export default function ProfileForm({ initial }: { initial: ProfileInitialData }
             <input
               id="customer-profile-email"
               type="email"
-              className={`${fieldClass} cursor-not-allowed bg-canvas text-stone-500`}
+              className={`${fieldClass} cursor-not-allowed bg-[#FAF7F1] text-[#8A7D71]`}
               value={initial.email}
               disabled
             />
-            <p className="mt-1.5 text-xs leading-5 text-stone-500">Your login email cannot be changed here.</p>
+            <p className="mt-1.5 text-xs leading-5 text-[#8A7D71]">Your login email cannot be changed here.</p>
           </div>
 
           <div>
@@ -117,7 +117,7 @@ export default function ProfileForm({ initial }: { initial: ProfileInitialData }
               onChange={(event) => set('phone', event.target.value)}
               placeholder="09XXXXXXXXX"
             />
-            <p className="mt-1.5 text-xs leading-5 text-stone-500">Used for delivery updates and workshop contact.</p>
+            <p className="mt-1.5 text-xs leading-5 text-[#8A7D71]">Used for delivery updates and workshop contact.</p>
           </div>
 
           <div>
@@ -144,7 +144,7 @@ export default function ProfileForm({ initial }: { initial: ProfileInitialData }
             onChange={(event) => set('bio', event.target.value)}
             placeholder="Share a little about yourself or your interest in Indigenous crafts and cultural heritage."
           />
-          <p className="mt-1.5 text-right text-xs text-stone-400">{form.bio.length}/1000</p>
+          <p className="mt-1.5 text-right text-xs text-[#8A7D71]">{form.bio.length}/1000</p>
         </div>
 
         {msg && (
@@ -152,7 +152,7 @@ export default function ProfileForm({ initial }: { initial: ProfileInitialData }
             role={msg.error ? 'alert' : 'status'}
             className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
               msg.error
-                ? 'border-crimson-200 bg-crimson-50 text-crimson-900'
+                ? 'border-red-200 bg-red-50 text-red-800'
                 : 'border-emerald-200 bg-emerald-50 text-emerald-900'
             }`}
           >
@@ -163,11 +163,11 @@ export default function ProfileForm({ initial }: { initial: ProfileInitialData }
           </div>
         )}
 
-        <div className="flex flex-col gap-3 border-t border-stone-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-5 text-stone-500">Your email is kept as your login and contact address.</p>
+        <div className="flex flex-col gap-3 border-t border-[#F0E8DD] pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-5 text-[#71675F]">Your email is kept as your login and contact address.</p>
           <button
             type="submit"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-crimson-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-crimson-800 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ochre-700"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#8B0000] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#6F0000] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D6B56D]"
             disabled={busy}
           >
             {busy ? 'Saving…' : <><Save size={16} aria-hidden="true" /> Save profile</>}

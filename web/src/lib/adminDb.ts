@@ -7,6 +7,7 @@ import {
 } from './seed';
 import { sql, tsString, parseJsonish } from './dbPg';
 import { invalidate } from './cache';
+import { removeDemoProfilePicture, saveDemoProfilePicture } from './demoProfilePictures';
 import { deleteStoredFiles } from './storage';
 import type {
   Product, Artisan, Order, OrderItem, Address, Report, ExperienceBooking,
@@ -265,6 +266,7 @@ export async function deleteCustomer(id: number): Promise<DeleteAccountResult> {
   const s = store();
   const customer = s.users.find((u) => u.id === id && u.role === 'customer' && !u.account_deleted_at);
   if (!customer) return { deleted: false };
+  await removeDemoProfilePicture(id);
   const email = customer.email;
   const orderIds = new Set(s.orders.filter((order) => order.customer_id === id).map((order) => order.id));
   const core = (globalThis as unknown as {
@@ -1687,6 +1689,9 @@ export async function updateCustomerProfile(id: number, p: { name?: string; phon
       profile_picture = coalesce(${p.profile_picture ?? null}, profile_picture)
       where id = ${id}`;
     return;
+  }
+  if (p.profile_picture !== undefined) {
+    await saveDemoProfilePicture(id, p.profile_picture);
   }
   const u = store().users.find((x) => x.id === id);
   if (u) Object.assign(u, Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)));

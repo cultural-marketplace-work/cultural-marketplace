@@ -58,7 +58,7 @@ export default function ReportForm({
   return (
     <form
       onSubmit={submit}
-      className="space-y-4 rounded-2xl border border-[#D6D0C9] bg-white p-5 shadow-sm sm:p-6"
+      className="space-y-4 rounded-2xl border border-[#E8DCCB] bg-white p-5 shadow-sm sm:p-6"
     >
       {prefill ? (
         /* Arrived from a Report button: show the name, no ID needed */
@@ -79,7 +79,7 @@ export default function ReportForm({
           <div>
             <label className={label}>What are you reporting?</label>
             <select
-              className="input border-[#D6D0C9]"
+              className="input border-[#E8DCCB]"
               value={type}
               onChange={(e) => {
                 setType(e.target.value as ReportType);
@@ -95,7 +95,7 @@ export default function ReportForm({
           <div>
             <label className={label}>Which {TYPE_LABEL[type]}?</label>
             <select
-              className="input border-[#D6D0C9]"
+              className="input border-[#E8DCCB]"
               value={reportedId}
               onChange={(e) => setReportedId(e.target.value)}
               required
@@ -114,7 +114,7 @@ export default function ReportForm({
       <div>
         <label className={label}>Describe the issue</label>
         <textarea
-          className="input h-28 border-[#D6D0C9]"
+          className="input h-28 border-[#E8DCCB]"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="e.g. Inappropriate Content&#10;&#10;Details: …"
