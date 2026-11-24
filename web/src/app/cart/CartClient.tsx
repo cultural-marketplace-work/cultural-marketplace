@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/Toast';
+import { AlertTriangle, ArrowRight, BookOpen, Eye, Minus, Package, Plus, ShoppingCart, Trash2, UserRound, X } from 'lucide-react';
 
 export interface CartRow {
   id: number;
@@ -184,28 +185,30 @@ if (v && Number(v.price) > 0) itemPrice += Number(v.price);
 
   if (items.length === 0) {
     return (
-      <div className="card mt-8 p-10 text-center">
-        <div className="text-5xl">🛒</div>
-        <p className="mt-4 text-stone-600">Your cart is empty.</p>
-        <Link className="btn-primary mt-6" href="/customer/browse">Browse crafts</Link>
+      <div className="mt-6 rounded-2xl border border-dashed border-[#D8C8B5] bg-white px-5 py-14 text-center">
+        <ShoppingCart size={40} aria-hidden="true" className="mx-auto text-[#80500D]" />
+        <p className="mt-4 font-serif text-xl font-bold text-[#3D3028]">Your cart is empty.</p>
+        <Link className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#8B0000] px-5 text-xs font-bold text-white transition hover:bg-[#6F0000]" href="/customer/browse">
+          Browse crafts <ArrowRight size={14} aria-hidden="true" />
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="mt-8 space-y-4">
+    <div className="mt-6 space-y-4">
       {/* Select All Bar */}
-      <div className="card flex items-center justify-between p-4 bg-brand-50/60 border border-brand-200/80">
-        <label className="flex items-center gap-3 cursor-pointer text-sm font-semibold text-stone-800 select-none">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#E8DCCB] bg-white p-4 shadow-sm">
+        <label className="flex cursor-pointer select-none items-center gap-3 text-sm font-semibold text-[#3D3028]">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-stone-300 text-brand-600 focus:ring-brand-500 cursor-pointer accent-brand-600"
+            className="h-4 w-4 cursor-pointer rounded border-[#D8C8B5] accent-[#8B0000] focus:ring-[#8B0000]"
             checked={isAllSelected}
             onChange={toggleAll}
           />
           <span>Select All Items ({items.length})</span>
         </label>
-        <span className="text-xs font-medium text-stone-500">
+        <span className="text-right text-xs font-medium text-[#71675F]">
           {selectedIds.size} of {items.length} item{items.length === 1 ? '' : 's'} marked for checkout
         </span>
       </div>
@@ -217,8 +220,8 @@ if (v && Number(v.price) > 0) itemPrice += Number(v.price);
           return (
             <div
               key={i.id}
-              className={`card flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3.5 sm:p-4 transition border ${
-                isSelected ? 'border-ochre-400 bg-white shadow-xs' : 'border-stone-200 bg-stone-50/50 opacity-80'
+              className={`flex flex-col gap-3 rounded-2xl border p-3.5 shadow-sm transition sm:flex-row sm:items-center sm:gap-4 sm:p-4 ${
+                isSelected ? 'border-[#D6B56D] bg-white' : 'border-[#E8DCCB] bg-[#FAF7F1]'
               }`}
             >
               {/* Mobile Top Row: Checkbox, Image, Title & Delete button */}
@@ -226,14 +229,14 @@ if (v && Number(v.price) > 0) itemPrice += Number(v.price);
                 <input
                   type="checkbox"
                   aria-label={`Select ${i.name}`}
-                  className="mt-1 sm:mt-0 h-4 w-4 rounded border-stone-300 text-crimson-600 focus:ring-crimson-500 cursor-pointer accent-crimson-600 shrink-0"
+                  className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-[#D8C8B5] accent-[#8B0000] focus:ring-[#8B0000] sm:mt-0"
                   checked={isSelected}
                   onChange={() => toggleItem(i.id)}
                 />
 
                 <Link
                   href={`/customer/browse/${i.product_id}`}
-                  className="relative flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-xl bg-abaca-100/60 overflow-hidden text-2xl sm:text-3xl shrink-0 border border-stone-200 hover:opacity-90 transition group"
+                  className="group relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E8DCCB] bg-[#F5EBDD] text-2xl transition hover:opacity-90 sm:h-16 sm:w-16 sm:text-3xl"
                   title="View original craft listing"
                 >
                   {i.image_path ? (
@@ -244,93 +247,96 @@ if (v && Number(v.price) > 0) itemPrice += Number(v.price);
                       className="h-full w-full object-cover group-hover:scale-105 transition-transform"
                     />
                   ) : (
-                    <span>{i.purchase_type === 'workshop' ? '🧑‍🏫' : '🧶'}</span>
+                    i.purchase_type === 'workshop'
+                      ? <BookOpen size={24} aria-hidden="true" className="text-[#80500D]" />
+                      : <Package size={24} aria-hidden="true" className="text-[#80500D]" />
                   )}
                 </Link>
 
                 <div className="flex-1 min-w-0 pr-1">
                   <Link
                     href={`/customer/browse/${i.product_id}`}
-                    className="font-sculpted text-sm sm:text-base font-bold text-charcoal-900 hover:text-crimson-700 block truncate transition"
+                    className="block truncate text-sm font-bold text-[#3D3028] transition hover:text-[#8B0000] sm:text-base"
                     title="Click to double check product listing"
                   >
                     {i.name}
                   </Link>
-                  <p className="text-xs text-stone-500 mt-0.5">
+                  <p className="mt-0.5 text-xs text-[#8A7D71]">
                     {i.variant ? `${i.variant} · ` : ''}
                     {i.purchase_type === 'workshop' ? (
-                      <span className="badge bg-ochre-100 text-ochre-900 border border-ochre-300 font-semibold text-[10px]">Workshop Booking</span>
+                      <span className="badge border border-[#D6B56D] bg-[#FFF4DF] text-[10px] font-semibold text-[#80500D]">Workshop Booking</span>
                     ) : (
                       'Handcrafted Craft'
                     )}
                   </p>
                   {i.attendee_name && (
-                    <p className="text-xs text-charcoal-800 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
-                      <span>👤 Attendee: {i.attendee_name}</span>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-[#3D3028]">
+                      <UserRound size={13} aria-hidden="true" className="text-[#80500D]" />
+                      <span>Attendee: {i.attendee_name}</span>
                       {i.attendee_for === 'others' && (
-                        <span className="rounded-full bg-ochre-100 border border-ochre-300 px-1.5 py-0.2 text-[10px] font-semibold text-ochre-900">
+                        <span className="rounded-full border border-[#D6B56D] bg-[#FFF4DF] px-1.5 py-0.5 text-[10px] font-semibold text-[#80500D]">
                           Guest / Group
                         </span>
                       )}
                     </p>
                   )}
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="mt-1 flex items-center gap-2">
                     <Link
                       href={`/customer/browse/${i.product_id}`}
-                      className="text-[11px] font-semibold text-ochre-700 hover:text-crimson-700 hover:underline flex items-center gap-0.5"
+                      className="flex items-center gap-1 text-[11px] font-semibold text-[#80500D] hover:text-[#8B0000] hover:underline"
                     >
-                      <span>🔍 View details</span>
+                      <Eye size={13} aria-hidden="true" /> View details
                     </Link>
-                    <span className="text-stone-300">·</span>
-                    <span className="text-xs text-stone-500 font-mono">₱{i.price.toFixed(2)} each</span>
+                    <span className="text-[#D8C8B5]">·</span>
+                    <span className="font-mono text-xs text-[#71675F]">₱{i.price.toFixed(2)} each</span>
                   </div>
                 </div>
 
                 {/* Remove button on top-right for mobile */}
                 <button
-                  className="sm:hidden text-stone-400 hover:text-crimson-700 p-1 text-base font-bold shrink-0 -mt-1"
+                  className="sm:hidden -mt-1 shrink-0 rounded-lg p-1 text-stone-400 transition hover:bg-red-50 hover:text-red-700"
                   aria-label="Remove"
                   onClick={() => remove(i.id)}
                 >
-                  ✕
+                  <X size={16} aria-hidden="true" />
                 </button>
               </div>
 
               {/* Bottom Row on Mobile / Right controls on Desktop */}
-              <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto pt-2 sm:pt-0 border-t border-abaca-100 sm:border-t-0">
-                <div className="flex items-center gap-1.5 rounded-xl border border-abaca-300 bg-white shadow-2xs overflow-hidden">
+              <div className="flex w-full items-center justify-between gap-4 border-t border-[#F0E8DD] pt-2 sm:w-auto sm:justify-end sm:border-t-0 sm:pt-0">
+                <div className="flex items-center gap-1.5 overflow-hidden rounded-xl border border-[#E8DCCB] bg-white shadow-sm">
                   <button
-                    className="flex h-8 w-8 items-center justify-center text-sm font-bold text-charcoal-700 hover:bg-ochre-50 active:bg-ochre-100 disabled:opacity-30 transition"
+                    className="flex h-8 w-8 items-center justify-center text-[#5A4030] transition hover:bg-[#FFF4DF] disabled:opacity-30"
                     disabled={busy}
                     onClick={() => updateQty(i.id, Math.max(1, i.quantity - 1))}
                     aria-label="Decrease quantity"
                   >
-                    −
+                    <Minus size={13} aria-hidden="true" />
                   </button>
-                  <span className="w-8 text-center text-xs font-bold text-charcoal-900">{i.quantity}</span>
+                  <span className="w-8 text-center text-xs font-bold text-[#3D3028]">{i.quantity}</span>
                   <button
-                    className="flex h-8 w-8 items-center justify-center text-sm font-bold text-charcoal-700 hover:bg-ochre-50 active:bg-ochre-100 disabled:opacity-30 transition"
+                    className="flex h-8 w-8 items-center justify-center text-[#5A4030] transition hover:bg-[#FFF4DF] disabled:opacity-30"
                     disabled={busy}
                     onClick={() => updateQty(i.id, i.quantity + 1)}
                     aria-label="Increase quantity"
                   >
-                    +
+                    <Plus size={13} aria-hidden="true" />
                   </button>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-[10px] text-stone-400 block sm:hidden uppercase font-semibold">Subtotal</span>
-                  <span className="font-mono text-base font-bold text-crimson-700">
+                  <span className="block text-[10px] font-semibold uppercase text-[#8A7D71] sm:hidden">Subtotal</span>
+                  <span className="font-mono text-base font-bold text-[#8B0000]">
                     ₱{(i.price * i.quantity).toFixed(2)}
                   </span>
                 </div>
 
                 <button
-                  className="hidden sm:inline-flex text-stone-400 hover:text-crimson-700 p-1 font-bold"
+                  className="hidden rounded-lg p-1 text-stone-400 transition hover:bg-red-50 hover:text-red-700 sm:inline-flex"
                   aria-label="Remove"
                   onClick={() => remove(i.id)}
                 >
-                  ✕
+                  <Trash2 size={16} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -339,33 +345,34 @@ if (v && Number(v.price) > 0) itemPrice += Number(v.price);
       </div>
 
       {/* Checkout Summary Bar */}
-      <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 sticky bottom-4 shadow-xl border-2 border-ochre-300 bg-white/95 backdrop-blur-md rounded-2xl">
+      <div className="sticky bottom-4 flex flex-col justify-between gap-4 rounded-2xl border border-[#D6B56D] bg-white/95 p-4 shadow-xl backdrop-blur-md sm:flex-row sm:items-center sm:p-5">
         <div>
-          <p className="text-xs text-stone-500 uppercase tracking-wider font-semibold">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#71675F]">
             Selected Subtotal ({selectedItems.length} item{selectedItems.length === 1 ? '' : 's'})
           </p>
-          <p className="text-2xl font-bold text-crimson-700 font-mono">₱{selectedTotal.toFixed(2)}</p>
+          <p className="font-mono text-2xl font-bold text-[#8B0000]">₱{selectedTotal.toFixed(2)}</p>
           {selectedIds.size === 0 && (
-            <p className="text-xs text-ochre-800 font-medium mt-0.5">
-              ⚠️ Please check at least 1 item above to proceed.
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-[#80500D]">
+              <AlertTriangle size={13} aria-hidden="true" />
+              Please check at least 1 item above to proceed.
             </p>
           )}
         </div>
 
         {selectedItems.length > 0 ? (
           <Link
-            className="btn-primary w-full sm:w-auto px-6 py-3 text-center text-sm font-bold shadow-md rounded-xl"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#8B0000] px-6 py-3 text-center text-sm font-bold text-white shadow-sm transition hover:bg-[#6F0000] sm:w-auto"
             href={`/checkout?items=${Array.from(selectedIds).join(',')}`}
           >
-            Proceed to checkout ({selectedItems.length}) →
+            Proceed to checkout ({selectedItems.length}) <ArrowRight size={15} aria-hidden="true" />
           </Link>
         ) : (
           <button
             type="button"
             disabled
-            className="btn-primary w-full sm:w-auto px-6 py-3 text-center text-sm font-semibold opacity-50 cursor-not-allowed rounded-xl"
+            className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-[#8B0000] px-6 py-3 text-center text-sm font-semibold text-white opacity-50 sm:w-auto"
           >
-            Select items to checkout →
+            Select items to checkout <ArrowRight size={15} aria-hidden="true" />
           </button>
         )}
       </div>

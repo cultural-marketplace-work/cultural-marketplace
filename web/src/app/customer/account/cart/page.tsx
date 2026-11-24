@@ -16,9 +16,11 @@ export default async function CustomerAccountCartPage() {
 
   return (
     <div className="min-h-screen bg-[#FCF9F4]">
-      <div className="mx-auto max-w-4xl px-4 py-6">
-        {/* PAGE HEADER */}
-        <div className="border-b border-[#E8DCCB] pb-5">
+      <div className="mx-auto max-w-6xl px-4 py-7 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden rounded-2xl border border-[#E8DCCB] bg-white p-6 shadow-sm sm:p-8">
+          <div aria-hidden="true" className="absolute -right-10 -top-12 h-48 w-48 rounded-full bg-[#F8EEDC] opacity-70" />
+          <div aria-hidden="true" className="absolute -right-2 bottom-0 h-24 w-24 rounded-full border-[14px] border-[#F3E5CD] opacity-50" />
+          <div className="relative z-10">
           <div className="flex items-center gap-2 text-xs text-stone-500 mb-1">
             <Link href="/customer/account/dashboard" className="hover:text-[#8B0000]">
               Dashboard
@@ -27,17 +29,16 @@ export default async function CustomerAccountCartPage() {
             <span className="font-semibold text-[#3D3028]">My Basket</span>
           </div>
 
-          <div className="flex items-center justify-between">
             <div>
-              <h1 className="font-serif text-2xl font-bold text-[#3D3028]">
+              <h1 className="mt-3 font-serif text-3xl font-bold text-[#3D3028] sm:text-4xl">
                 Your Basket
               </h1>
-              <p className="mt-1 text-sm text-[#71675F]">
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#71675F]">
                 Review your handcrafted selections and workshop passes before completing the secure exchange.
               </p>
             </div>
           </div>
-        </div>
+        </section>
 
         <div className="mt-6">
           <CartClient

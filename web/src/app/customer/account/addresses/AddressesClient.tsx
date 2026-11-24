@@ -32,24 +32,24 @@ export default function AddressesClient({ initial }: { initial: Row[] }) {
   }
 
   return (
-    <div className="mt-6 space-y-3">
+    <div className="space-y-3">
       {rows.map((a) => (
-        <div key={a.id} className="card p-4">
+        <div key={a.id} className="rounded-2xl border border-[#E8DCCB] bg-white p-4 shadow-sm sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-semibold text-stone-800">
-                {a.label}{a.is_default && <span className="badge ml-2 bg-ochre-100 text-ochre-900 border border-ochre-300 font-semibold">default</span>}
+              <p className="font-semibold text-[#3D3028]">
+                {a.label}{a.is_default && <span className="badge ml-2 border border-[#D6B56D] bg-[#FFF4DF] font-semibold text-[#80500D]">default</span>}
               </p>
-              <p className="mt-1 text-sm text-stone-600">{a.address}</p>
-              <p className="text-xs text-stone-400">{a.full_name}{a.phone ? ` · ${a.phone}` : ''}{a.landmark ? ` · landmark: ${a.landmark}` : ''}</p>
+              <p className="mt-1 text-sm text-[#3D3028]">{a.address}</p>
+              <p className="text-xs text-[#8A7D71]">{a.full_name}{a.phone ? ` · ${a.phone}` : ''}{a.landmark ? ` · landmark: ${a.landmark}` : ''}</p>
             </div>
             <div className="flex flex-col items-end gap-2">
               {!a.is_default && (
-                <button className="btn-outline px-3 py-1 text-xs" disabled={busy} onClick={async () => { await call({ action: 'set-default', id: a.id }); setRows((rs) => rs.map((r) => ({ ...r, is_default: r.id === a.id }))); }}>
+                <button className="rounded-lg border border-[#D8C8B5] bg-white px-3 py-2 text-xs font-semibold text-[#5A4030] transition hover:bg-[#FFF5E4] disabled:opacity-50" disabled={busy} onClick={async () => { await call({ action: 'set-default', id: a.id }); setRows((rs) => rs.map((r) => ({ ...r, is_default: r.id === a.id }))); }}>
                   Set default
                 </button>
               )}
-              <button className="text-stone-400 hover:text-red-600" disabled={busy}
+              <button className="rounded-lg px-2 py-1 text-stone-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50" disabled={busy}
                 onClick={async () => { await call({ action: 'delete', id: a.id }); setRows((rs) => rs.filter((r) => r.id !== a.id)); }}>
                 ✕
               </button>
@@ -59,24 +59,24 @@ export default function AddressesClient({ initial }: { initial: Row[] }) {
       ))}
 
       {adding ? (
-        <div className="card space-y-3 p-4">
+        <div className="space-y-3 rounded-2xl border border-[#E8DCCB] bg-white p-4 shadow-sm sm:p-5">
           <div className="grid grid-cols-2 gap-3">
-            <input className="input" placeholder="Label (Home, Office…)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
-            <input className="input" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <input className="input border-[#E8DCCB]" placeholder="Label (Home, Office…)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+            <input className="input border-[#E8DCCB]" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </div>
-          <input className="input" placeholder="Full name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
-          <textarea className="input h-20" placeholder="Complete address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-          <input className="input" placeholder="Landmark (optional)" value={form.landmark} onChange={(e) => setForm({ ...form, landmark: e.target.value })} />
-          <label className="flex items-center gap-2 text-sm text-stone-600">
+          <input className="input border-[#E8DCCB]" placeholder="Full name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+          <textarea className="input h-20 border-[#E8DCCB]" placeholder="Complete address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <input className="input border-[#E8DCCB]" placeholder="Landmark (optional)" value={form.landmark} onChange={(e) => setForm({ ...form, landmark: e.target.value })} />
+          <label className="flex items-center gap-2 text-sm text-[#71675F]">
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} /> Set as default
           </label>
           <div className="flex gap-2">
-            <button className="btn-primary px-3 py-1 text-xs" disabled={busy} onClick={add}>Save address</button>
-            <button className="btn-outline px-3 py-1 text-xs" onClick={() => setAdding(false)}>Cancel</button>
+            <button className="rounded-lg bg-[#8B0000] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#6F0000] disabled:opacity-50" disabled={busy} onClick={add}>Save address</button>
+            <button className="rounded-lg border border-[#D8C8B5] px-4 py-2.5 text-xs font-semibold text-[#5A4030] transition hover:bg-[#FAF7F1]" onClick={() => setAdding(false)}>Cancel</button>
           </div>
         </div>
       ) : (
-        <button className="btn-outline w-full" onClick={() => setAdding(true)}>+ Add address</button>
+        <button className="w-full rounded-lg border border-[#D6B56D] bg-white px-4 py-3 text-sm font-bold text-[#80500D] transition hover:bg-[#FFF5E4]" onClick={() => setAdding(true)}>+ Add address</button>
       )}
     </div>
   );

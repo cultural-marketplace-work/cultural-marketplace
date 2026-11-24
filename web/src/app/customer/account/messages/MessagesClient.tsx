@@ -101,14 +101,14 @@ export default function MessagesClient({
 
   if (conversations.length === 0) {
     return (
-      <section className="mt-6 rounded-2xl border border-abaca-200/80 bg-white/90 px-6 py-12 text-center shadow-sm">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-ochre-50 text-ochre-800">
+      <section className={`mt-6 rounded-2xl border px-6 py-12 text-center shadow-sm ${isArtisan ? 'border-abaca-200/80 bg-white/90' : 'border-[#E8DCCB] bg-white'}`}>
+        <span className={`mx-auto flex h-14 w-14 items-center justify-center rounded-2xl ${isArtisan ? 'bg-ochre-50 text-ochre-800' : 'bg-[#FFF3DE] text-[#80500D]'}`}>
           <MessageCircle size={25} strokeWidth={1.7} aria-hidden="true" />
         </span>
-        <h2 className="mt-4 font-serif text-xl font-bold text-brand-900">
+        <h2 className={`mt-4 font-serif text-xl font-bold ${isArtisan ? 'text-brand-900' : 'text-[#3D3028]'}`}>
           {isArtisan ? 'Your conversations will appear here' : 'No conversations yet'}
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-stone-500">
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#71675F]">
           {isArtisan
             ? 'When a customer reaches out about your craft, you can reply here and keep the conversation going.'
             : 'Open a creation and choose “Message artisan” to ask a question.'}
@@ -124,9 +124,9 @@ export default function MessagesClient({
           {readError}
         </p>
       )}
-      <section aria-label={isArtisan ? 'Customer conversations' : 'Artisan conversations'} className="overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/90 shadow-sm">
-        <div className="border-b border-abaca-100 px-4 py-4">
-          <h2 className="font-serif text-lg font-bold text-brand-900">{isArtisan ? 'Your customers' : 'Your conversations'}</h2>
+      <section aria-label={isArtisan ? 'Customer conversations' : 'Artisan conversations'} className={`overflow-hidden rounded-2xl border shadow-sm ${isArtisan ? 'border-abaca-200/80 bg-white/90' : 'border-[#E8DCCB] bg-white'}`}>
+        <div className={`border-b px-4 py-4 ${isArtisan ? 'border-abaca-100' : 'border-[#F0E8DD]'}`}>
+          <h2 className={`font-serif text-lg font-bold ${isArtisan ? 'text-brand-900' : 'text-[#3D3028]'}`}>{isArtisan ? 'Your customers' : 'Your conversations'}</h2>
           <p className="mt-1 text-xs leading-5 text-stone-500">
             {isArtisan ? 'Choose a conversation to reply.' : 'Choose a conversation to continue.'}
           </p>
@@ -141,40 +141,40 @@ export default function MessagesClient({
                 setSendError('');
               }}
               aria-pressed={activeId === c.id}
-              className={`flex min-h-[68px] w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${activeId === c.id ? 'border-brand-300 bg-ochre-50/80' : 'border-transparent bg-white hover:border-abaca-200 hover:bg-canvas'}`}
+              className={`flex min-h-[68px] w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${isArtisan ? 'focus-visible:outline-brand-500' : 'focus-visible:outline-[#8B0000]'} ${activeId === c.id ? (isArtisan ? 'border-brand-300 bg-ochre-50/80' : 'border-[#D6B56D] bg-[#FFF4DF]') : (isArtisan ? 'border-transparent bg-white hover:border-abaca-200 hover:bg-canvas' : 'border-transparent bg-white hover:border-[#E8DCCB] hover:bg-[#FAF7F1]')}`}
             >
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-serif text-sm font-bold ${activeId === c.id ? 'bg-brand-700 text-white' : 'bg-abaca-100 text-brand-900'}`} aria-hidden="true">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-serif text-sm font-bold ${activeId === c.id ? (isArtisan ? 'bg-brand-700 text-white' : 'bg-[#8B0000] text-white') : (isArtisan ? 'bg-abaca-100 text-brand-900' : 'bg-[#F5EBDD] text-[#80500D]')}`} aria-hidden="true">
                 {c.counterpart.trim().charAt(0).toUpperCase()}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-stone-800">{c.counterpart}</span>
+                <span className="block truncate text-sm font-semibold text-[#3D3028]">{c.counterpart}</span>
                 <span className="mt-1 block truncate text-xs text-stone-500">
                   {c.product_name ? `About ${c.product_name}` : 'Conversation'}
                 </span>
               </span>
-              <span className={`h-2 w-2 shrink-0 rounded-full ${activeId === c.id ? 'bg-ochre-600' : 'bg-abaca-300'}`} aria-hidden="true" />
+              <span className={`h-2 w-2 shrink-0 rounded-full ${activeId === c.id ? (isArtisan ? 'bg-ochre-600' : 'bg-[#8B0000]') : (isArtisan ? 'bg-abaca-300' : 'bg-[#D8C8B5]')}`} aria-hidden="true" />
             </button>
           ))}
         </div>
       </section>
-      <section aria-label="Message thread" className="relative flex h-[min(72vh,680px)] min-h-[460px] flex-col overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/95 shadow-sm">
+      <section aria-label="Message thread" className={`relative flex h-[min(72vh,680px)] min-h-[460px] flex-col overflow-hidden rounded-2xl border shadow-sm ${isArtisan ? 'border-abaca-200/80 bg-white/95' : 'border-[#E8DCCB] bg-white'}`}>
         {activeConversation && (
-          <div className="flex items-center gap-3 border-b border-abaca-100 px-4 py-4 sm:px-5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ochre-50 text-ochre-800">
+          <div className={`flex items-center gap-3 border-b px-4 py-4 sm:px-5 ${isArtisan ? 'border-abaca-100' : 'border-[#F0E8DD]'}`}>
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isArtisan ? 'bg-ochre-50 text-ochre-800' : 'bg-[#FFF3DE] text-[#80500D]'}`}>
               <MessageCircle size={19} aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-brand-900">{activeConversation.counterpart}</p>
+              <p className="truncate text-sm font-bold text-[#3D3028]">{activeConversation.counterpart}</p>
               {activeConversation.product_name ? (
                 activeConversation.product_id ? (
                   <a
                     href={`/customer/browse/${activeConversation.product_id}`}
-                    className="mt-0.5 block truncate text-xs font-medium text-ochre-800 hover:underline"
+                    className={`mt-0.5 block truncate text-xs font-medium hover:underline ${isArtisan ? 'text-ochre-800' : 'text-[#80500D]'}`}
                   >
                     {isArtisan ? 'Asking about: ' : 'About: '}{activeConversation.product_name}
                   </a>
                 ) : (
-                  <p className="mt-0.5 truncate text-xs font-medium text-ochre-800">
+                  <p className={`mt-0.5 truncate text-xs font-medium ${isArtisan ? 'text-ochre-800' : 'text-[#80500D]'}`}>
                     {isArtisan ? 'Asking about: ' : 'About: '}{activeConversation.product_name}
                   </p>
                 )
@@ -184,12 +184,12 @@ export default function MessagesClient({
             </div>
           </div>
         )}
-        <div className="flex-1 space-y-4 overflow-y-auto bg-canvas/60 p-4 sm:p-5">
+        <div className={`flex-1 space-y-4 overflow-y-auto p-4 sm:p-5 ${isArtisan ? 'bg-canvas/60' : 'bg-[#FCF9F4]'}`}>
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.sender_role === role ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[75%] ${m.sender_role === role ? 'rounded-br-md bg-brand-700 text-white' : 'rounded-bl-md border border-abaca-100 bg-white text-stone-800'}`}>
+              <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[75%] ${m.sender_role === role ? (isArtisan ? 'rounded-br-md bg-brand-700 text-white' : 'rounded-br-md bg-[#8B0000] text-white') : (isArtisan ? 'rounded-bl-md border border-abaca-100 bg-white text-stone-800' : 'rounded-bl-md border border-[#E8DCCB] bg-white text-[#3D3028]')}`}>
                 {m.reply_to_message_id && (
-                  <div className={`mb-2 rounded-lg border-l-2 px-2.5 py-1.5 text-xs ${m.sender_role === role ? 'border-ochre-300 bg-white/10 text-white/85' : 'border-brand-500 bg-canvas text-stone-600'}`}>
+                  <div className={`mb-2 rounded-lg border-l-2 px-2.5 py-1.5 text-xs ${m.sender_role === role ? 'border-[#D6B56D] bg-white/10 text-white/85' : (isArtisan ? 'border-brand-500 bg-canvas text-stone-600' : 'border-[#8B0000] bg-[#FAF7F1] text-[#71675F]')}`}>
                     <p className="font-semibold">
                       Replying to {m.reply_to_sender_role === role ? 'your message' : isArtisan ? 'customer' : 'artisan'}
                     </p>
@@ -202,7 +202,7 @@ export default function MessagesClient({
                   m.product_id ? (
                     <a
                       href={`/customer/browse/${m.product_id}`}
-                      className={`mb-2 block border-b pb-2 text-xs font-bold ${m.sender_role === role ? 'border-white/30 text-white' : 'border-abaca-200 text-brand-700'}`}
+                      className={`mb-2 block border-b pb-2 text-xs font-bold ${m.sender_role === role ? 'border-white/30 text-white' : (isArtisan ? 'border-abaca-200 text-brand-700' : 'border-[#E8DCCB] text-[#8B0000]')}`}
                     >
                       Product: {m.product_name}
                     </a>
@@ -213,7 +213,7 @@ export default function MessagesClient({
                   )
                 )}
                 <p className="whitespace-pre-line">{m.message}</p>
-                <p className={`mt-1 text-[10px] ${m.sender_role === role ? 'text-white/70' : 'text-stone-400'}`}>
+                <p className={`mt-1 text-[10px] ${m.sender_role === role ? 'text-white/70' : 'text-[#8A7D71]'}`}>
                   {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
                 <button
@@ -224,7 +224,7 @@ export default function MessagesClient({
                     inputRef.current?.focus();
                   }}
                   aria-label={`Reply to ${m.sender_role === role ? 'your' : isArtisan ? 'customer' : 'artisan'} message`}
-                  className={`mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ochre-400 ${m.sender_role === role ? 'text-white/80 hover:bg-white/10 hover:text-white' : 'text-brand-700 hover:bg-ochre-50 hover:text-brand-900'}`}
+                  className={`mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ochre-400 ${m.sender_role === role ? 'text-white/80 hover:bg-white/10 hover:text-white' : (isArtisan ? 'text-brand-700 hover:bg-ochre-50 hover:text-brand-900' : 'text-[#8B0000] hover:bg-[#FFF4DF] hover:text-[#5A4030]')}`}
                 >
                   <Reply size={13} aria-hidden="true" />
                   Reply
@@ -233,28 +233,28 @@ export default function MessagesClient({
             </div>
           ))}
           {messages.length === 0 && (
-            <p className="m-auto rounded-xl border border-abaca-100 bg-white/80 px-4 py-3 text-center text-sm text-stone-500">
+            <p className={`m-auto rounded-xl border px-4 py-3 text-center text-sm text-[#71675F] ${isArtisan ? 'border-abaca-100 bg-white/80' : 'border-[#E8DCCB] bg-white/80'}`}>
               {isArtisan ? 'Start by greeting your customer.' : 'No messages yet — say hello!'}
             </p>
           )}
           <div ref={bottomRef} />
         </div>
         {sendError && <p role="alert" className="border-t border-red-100 bg-red-50 px-4 py-2 text-sm text-red-800">{sendError}</p>}
-        <form onSubmit={send} className="flex items-end gap-2 border-t border-abaca-100 bg-white p-3 sm:p-4">
+        <form onSubmit={send} className={`flex items-end gap-2 border-t bg-white p-3 sm:p-4 ${isArtisan ? 'border-abaca-100' : 'border-[#F0E8DD]'}`}>
           {replyingTo && (
-            <div className="absolute bottom-[4.5rem] left-4 right-4 rounded-xl border border-abaca-200 bg-white p-3 shadow-lg sm:left-auto sm:right-6 sm:w-[min(28rem,calc(100%-3rem))]">
+            <div className={`absolute bottom-[4.5rem] left-4 right-4 rounded-xl border bg-white p-3 shadow-lg sm:left-auto sm:right-6 sm:w-[min(28rem,calc(100%-3rem))] ${isArtisan ? 'border-abaca-200' : 'border-[#E8DCCB]'}`}>
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-brand-900">
+                  <p className={`text-xs font-bold ${isArtisan ? 'text-brand-900' : 'text-[#3D3028]'}`}>
                     Replying to {replyingTo.sender_role === role ? 'your message' : isArtisan ? 'customer' : 'artisan'}
                   </p>
-                  <p className="mt-1 truncate text-xs text-stone-500">{replyingTo.message}</p>
+                  <p className="mt-1 truncate text-xs text-[#71675F]">{replyingTo.message}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setReplyingTo(null)}
                   aria-label="Cancel reply"
-                  className="rounded-lg p-1 text-stone-500 hover:bg-canvas hover:text-brand-900"
+                  className="rounded-lg p-1 text-stone-500 hover:bg-[#FAF7F1] hover:text-[#8B0000]"
                 >
                   <X size={16} aria-hidden="true" />
                 </button>
@@ -263,13 +263,13 @@ export default function MessagesClient({
           )}
           <input
             ref={inputRef}
-            className="input min-h-11 flex-1"
+            className={`min-h-11 flex-1 rounded-xl border px-3 text-sm outline-none transition focus:ring-2 ${isArtisan ? 'input focus:border-brand-500 focus:ring-brand-500/20' : 'border-[#E8DCCB] bg-white text-[#3D3028] placeholder:text-[#A69B90] focus:border-[#B78B45] focus:ring-[#D6B56D]/20'}`}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={isArtisan ? 'Write a friendly reply…' : 'Type a message…'}
             aria-label="Write a message"
           />
-          <button className="btn-primary min-h-11 shrink-0 px-4" type="submit" disabled={!draft.trim()} aria-label="Send message">
+          <button className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${isArtisan ? 'btn-primary' : 'bg-[#8B0000] hover:bg-[#6F0000]'}`} type="submit" disabled={!draft.trim()} aria-label="Send message">
             <Send size={16} aria-hidden="true" />
             <span className="hidden sm:inline">Send</span>
           </button>

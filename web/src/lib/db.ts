@@ -7,6 +7,7 @@
 import bcrypt from 'bcryptjs';
 import { sql, tsString, parseJsonish } from './dbPg';
 import { cached, invalidate } from './cache';
+import { getDemoProfilePicture } from './demoProfilePictures';
 import { ARTISAN_CEB_TRANSLATIONS } from './artisanTranslations';
 import {
   seedUsers, seedArtisans, seedCategories, seedProducts,
@@ -168,7 +169,15 @@ export async function getUser(id: number): Promise<(SessionUser & { phone?: stri
     };
   }
   const u = store!.users.find((x) => x.id === id && x.role !== 'artisan' && !x.account_deleted_at);
-  return u ? { ...u, phone: u.phone ?? null, location: u.location ?? null, bio: u.bio ?? null } : null;
+  if (!u) return null;
+  const profilePicture = await getDemoProfilePicture(id);
+  return {
+    ...u,
+    profile_picture: profilePicture ?? u.profile_picture ?? null,
+    phone: u.phone ?? null,
+    location: u.location ?? null,
+    bio: u.bio ?? null,
+  };
 }
 
 export async function updateAdminProfile(id: number, p: { name?: string; phone?: string }): Promise<void> {

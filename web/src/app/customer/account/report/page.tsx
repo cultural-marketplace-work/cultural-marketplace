@@ -26,32 +26,34 @@ export default async function CustomerReportPage({
   }
 
   return (
-    <main className="min-h-screen bg-[#FCF9F4]">
-      <section className="px-4 py-6 md:px-8">
-        <div className="mx-auto max-w-5xl text-center">
-          <h1 className="font-serif text-xl font-bold text-[#3D3028] md:text-2xl">Report an issue</h1>
-          <p className="mt-1 text-sm text-[#71675F]">
-            Report a listing or artisan that violates our community rules.
-          </p>
-        </div>
-      </section>
+    <main className="min-h-screen bg-[#FCF9F4] px-4 py-7 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <section className="relative overflow-hidden rounded-2xl border border-[#E8DCCB] bg-white p-6 shadow-sm sm:p-8">
+          <div aria-hidden="true" className="absolute -right-10 -top-12 h-48 w-48 rounded-full bg-[#F8EEDC] opacity-70" />
+          <div aria-hidden="true" className="absolute -right-2 bottom-0 h-24 w-24 rounded-full border-[14px] border-[#F3E5CD] opacity-50" />
+          <div className="relative z-10">
+            <h1 className="font-serif text-3xl font-bold text-[#3D3028] sm:text-4xl">Report an issue</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#71675F]">
+              Report a listing or artisan that violates our community rules.
+            </p>
+          </div>
+        </section>
 
-      <div className="h-px w-full bg-gray-300" />
-
-      <section className="px-4 py-5 md:px-8 md:py-6">
-        <div className="mx-auto max-w-xl">
-          <ReportForm
-            prefill={prefill}
-            options={{
-              product: products.map((p) => ({ id: p.id, name: p.name })),
-              experience: products
-                .filter((p) => p.has_tutorial)
-                .map((p) => ({ id: p.id, name: p.tutorial_title || p.name })),
-              artisan: artisans.map((a) => ({ id: a.id, name: a.name })),
-            }}
-          />
-        </div>
-      </section>
+        <section>
+          <div className="mx-auto max-w-2xl">
+            <ReportForm
+              prefill={prefill}
+              options={{
+                product: products.map((p) => ({ id: p.id, name: p.name })),
+                experience: products
+                  .filter((p) => p.has_tutorial)
+                  .map((p) => ({ id: p.id, name: p.tutorial_title || p.name })),
+                artisan: artisans.map((a) => ({ id: a.id, name: a.name })),
+              }}
+            />
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

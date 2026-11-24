@@ -2,8 +2,28 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import {
+  AlertTriangle,
+  ArrowRight,
+  ArrowUpRight,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  MapPin,
+  Package,
+  Search,
+  ShoppingBag,
+  Star,
+  Ticket,
+  Truck,
+  X,
+} from 'lucide-react';
 
 export interface OrderItemRow {
   id: number;
@@ -218,7 +238,7 @@ function TrackingCard({
           rel="noopener noreferrer"
           className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
         >
-          Track Package ↗
+          Track Package <ArrowUpRight size={13} aria-hidden="true" />
         </a>
       </div>
 
@@ -234,7 +254,7 @@ function TrackingCard({
                     : 'bg-stone-200 text-stone-500'
                 }`}
               >
-                {i <= index ? '✓' : i + 1}
+                {i <= index ? <Check size={14} aria-hidden="true" /> : i + 1}
               </div>
               <div
                 className={`h-0.5 flex-1 ${
@@ -260,7 +280,7 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
-  icon: string;
+  icon: ReactNode;
   color: string;
 }) {
   return (
@@ -549,7 +569,7 @@ export default function OrdersClient({
               href="/customer/browse"
               className="inline-flex items-center gap-2 rounded-lg bg-[#8B0000] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#6F0000]"
             >
-              Explore Crafts <span>→</span>
+              Explore Crafts <ArrowRight size={14} aria-hidden="true" />
             </Link>
 
             <Link
@@ -572,7 +592,11 @@ export default function OrdersClient({
               : 'border-red-200 bg-red-50 text-red-800'
           }`}
         >
-          <span>{msg.type === 'success' ? '✓' : '⚠'}</span>
+          <span>
+            {msg.type === 'success'
+              ? <CheckCircle2 size={18} aria-hidden="true" />
+              : <AlertTriangle size={18} aria-hidden="true" />}
+          </span>
           <p className="flex-1">{msg.text}</p>
           <button
             type="button"
@@ -580,7 +604,7 @@ export default function OrdersClient({
             className="font-bold"
             aria-label="Dismiss message"
           >
-            ×
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -602,25 +626,25 @@ export default function OrdersClient({
           <SummaryCard
             label="Total Orders"
             value={summary.total}
-            icon="🛍️"
+            icon={<ShoppingBag size={20} aria-hidden="true" />}
             color="bg-[#FFF3DE]"
           />
           <SummaryCard
             label="Processing"
             value={summary.processing}
-            icon="📦"
+            icon={<Package size={20} aria-hidden="true" />}
             color="bg-blue-50"
           />
           <SummaryCard
             label="On the Way"
             value={summary.shipped}
-            icon="🚚"
+            icon={<Truck size={20} aria-hidden="true" />}
             color="bg-indigo-50"
           />
           <SummaryCard
             label="Items to Review"
             value={summary.review}
-            icon="⭐"
+            icon={<Star size={20} aria-hidden="true" />}
             color="bg-emerald-50"
           />
         </div>
@@ -639,8 +663,8 @@ export default function OrdersClient({
 
         {/* SEARCH */}
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg text-[#9A8F84]">
-            ⌕
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9A8F84]">
+            <Search size={18} aria-hidden="true" />
           </span>
           <input
             type="search"
@@ -745,7 +769,7 @@ export default function OrdersClient({
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-3xl">
-                🧺
+                <Package size={30} aria-hidden="true" />
               </div>
             )}
           </div>
@@ -791,7 +815,7 @@ export default function OrdersClient({
             href={`/order/receipt/${order.id}`}
             className="rounded-lg border border-[#D8C8B5] bg-white px-3 py-2 text-xs font-semibold text-[#5A4030] transition hover:bg-[#FFF5E4]"
           >
-            Receipt ↗
+            Receipt <ArrowUpRight size={13} aria-hidden="true" />
           </Link>
 
           {canCancel && (
@@ -851,8 +875,9 @@ export default function OrdersClient({
                               </p>
 
                               {item.ticket_code && (
-                                <p className="mt-2 inline-flex rounded-lg border border-[#E8DCCB] bg-[#FFF9EF] px-2.5 py-1 font-mono text-[10px] font-bold text-[#80500D]">
-                                  🎟️ {item.ticket_code}
+                                <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E8DCCB] bg-[#FFF9EF] px-2.5 py-1 font-mono text-[10px] font-bold text-[#80500D]">
+                                  <Ticket size={13} aria-hidden="true" />
+                                  {item.ticket_code}
                                 </p>
                               )}
 
@@ -884,7 +909,7 @@ export default function OrdersClient({
                                 onClick={() => receive(item.id)}
                                 className="rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:opacity-50"
                               >
-                                {busy ? 'Please wait...' : '✓ Confirm Received'}
+                                {busy ? 'Please wait...' : <><Check size={14} aria-hidden="true" /> Confirm Received</>}
                               </button>
                             )}
 
@@ -898,15 +923,23 @@ export default function OrdersClient({
                                 }}
                                 className="rounded-lg bg-[#8B0000] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#6F0000]"
                               >
-                                ★ Leave a Review
+                                <Star size={14} aria-hidden="true" /> Leave a Review
                               </button>
                             )}
 
                             {item.rating != null && (
-                              <span className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                                {'★'.repeat(item.rating)}
-                                {'☆'.repeat(5 - item.rating)}
-                                {' '}Reviewed
+                              <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                                <span className="inline-flex" aria-label={`${item.rating} out of 5 stars`}>
+                                  {Array.from({ length: 5 }, (_, index) => (
+                                    <Star
+                                      key={index}
+                                      size={13}
+                                      aria-hidden="true"
+                                      className={index < item.rating! ? 'fill-emerald-600 text-emerald-600' : 'text-emerald-200'}
+                                    />
+                                  ))}
+                                </span>
+                                Reviewed
                               </span>
                             )}
 
@@ -950,7 +983,7 @@ export default function OrdersClient({
                                         : 'text-[#D9D0C5]'
                                     }`}
                                   >
-                                    ★
+                                    <Star size={24} aria-hidden="true" fill={star <= rating ? 'currentColor' : 'none'} />
                                   </button>
                                 ))}
                               </div>
@@ -979,7 +1012,7 @@ export default function OrdersClient({
                                   onClick={() => submitReview(item.id)}
                                   className="rounded-lg bg-[#8B0000] px-5 py-2 text-xs font-bold text-white transition hover:bg-[#6F0000] disabled:opacity-50"
                                 >
-                                  {busy ? 'Submitting...' : 'Submit Review →'}
+                                  {busy ? 'Submitting...' : <>Submit Review <ArrowRight size={13} aria-hidden="true" /></>}
                                 </button>
                               </div>
                             </div>
@@ -993,25 +1026,28 @@ export default function OrdersClient({
                               </p>
 
                               <p className="mt-1 text-xs font-semibold text-[#3D3028]">
-                                📅 {item.selected_session.date}
+                                <CalendarDays size={13} aria-hidden="true" className="mr-1 inline-block" />
+                                {item.selected_session.date}
                               </p>
 
                               <p className="mt-1 text-xs text-[#71675F]">
-                                🕒 {item.selected_session.time_start} –{' '}
+                                <Clock3 size={13} aria-hidden="true" className="mr-1 inline-block" />
+                                {item.selected_session.time_start} –{' '}
                                 {item.selected_session.time_end}
                               </p>
 
                               {item.selected_session.location && (
                                 <p className="mt-1 text-xs text-[#71675F]">
-                                  📍 {item.selected_session.location}
+                                  <MapPin size={13} aria-hidden="true" className="mr-1 inline-block" />
+                                  {item.selected_session.location}
                                 </p>
                               )}
 
                               <Link
                                 href={`/order/success/${order.id}#venue-guide`}
-                                className="mt-3 inline-flex text-[11px] font-bold text-[#8B0000] hover:underline"
+                                className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-[#8B0000] hover:underline"
                               >
-                                Open Venue & GPS Guide →
+                                Open Venue &amp; GPS Guide <ArrowRight size={12} aria-hidden="true" />
                               </Link>
                             </div>
                           )}
@@ -1047,9 +1083,11 @@ export default function OrdersClient({
                     <button
                       type="button"
                       onClick={() => toggleExpanded(order.id)}
-                      className="rounded-lg border border-[#D6B56D] bg-white px-4 py-2.5 text-xs font-bold text-[#80500D] transition hover:bg-[#FFF5E4]"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#D6B56D] bg-white px-4 py-2.5 text-xs font-bold text-[#80500D] transition hover:bg-[#FFF5E4]"
                     >
-                      {expanded ? 'Hide Order Details ↑' : 'Order Details ↓'}
+                      {expanded
+                        ? <>Hide Order Details <ChevronUp size={14} aria-hidden="true" /></>
+                        : <>Order Details <ChevronDown size={14} aria-hidden="true" /></>}
                     </button>
                   </div>
 
@@ -1094,7 +1132,7 @@ export default function OrdersClient({
                         href={`/order/receipt/${order.id}`}
                         className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#8B0000] hover:underline"
                       >
-                        View Printable Receipt & Ticket →
+                        View Printable Receipt &amp; Ticket <ArrowRight size={13} aria-hidden="true" />
                       </Link>
                     </div>
                   )}
@@ -1104,7 +1142,9 @@ export default function OrdersClient({
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-[#D8C8B5] bg-white px-5 py-14 text-center">
-            <div className="text-5xl">🧺</div>
+            <div className="flex justify-center text-[#80500D]">
+              <Package size={40} aria-hidden="true" />
+            </div>
             <h3 className="mt-4 font-serif text-xl font-bold text-[#3D3028]">
               No orders found
             </h3>
@@ -1132,7 +1172,7 @@ export default function OrdersClient({
                 href="/customer/browse"
                 className="rounded-lg bg-[#8B0000] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#6F0000]"
               >
-                Browse Crafts →
+                Browse Crafts <ArrowRight size={13} aria-hidden="true" />
               </Link>
             </div>
           </div>
@@ -1144,8 +1184,8 @@ export default function OrdersClient({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-[#E8DCCB] bg-white p-6 shadow-2xl">
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-xl">
-                ⚠️
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-700">
+                <AlertTriangle size={20} aria-hidden="true" />
               </span>
 
               <div>
