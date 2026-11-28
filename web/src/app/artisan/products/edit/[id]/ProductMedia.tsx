@@ -5,7 +5,7 @@ import { compressImage } from '@/lib/imageCompress';
 import { AlertCircle, Camera, Image as ImageIcon, LoaderCircle, Plus, Trash2, Upload, X } from 'lucide-react';
 
 // Product media manager shown on the edit page (needs the product to exist).
-// Main image + up to 20 gallery images with automatic client-side canvas compression.
+// Main image and gallery images with automatic client-side canvas compression.
 export default function ProductMedia({
   productId, initialMain, initialGallery,
 }: {
@@ -69,12 +69,7 @@ export default function ProductMedia({
 
   async function handleGalleryFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
-    const remaining = 20 - gallery.length;
-    if (remaining <= 0) {
-      setError('The gallery already has the maximum of 20 photos.');
-      return;
-    }
-    const files = Array.from(fileList).slice(0, remaining);
+    const files = Array.from(fileList);
     try {
       for (let index = 0; index < files.length; index++) {
         const uploaded = await upload(
@@ -139,7 +134,7 @@ export default function ProductMedia({
             <p className="mt-0.5 text-xs leading-5 text-stone-500">Show the details and care behind your creation.</p>
           </div>
         </div>
-        <span className="badge border border-abaca-200 bg-canvas text-stone-600">Up to 20 gallery photos</span>
+        <span className="badge border border-abaca-200 bg-canvas text-stone-600">No fixed photo limit</span>
       </header>
 
       <div className="space-y-5 p-4 sm:p-6">
@@ -217,7 +212,7 @@ export default function ProductMedia({
                 <h3 id="gallery-title" className="text-sm font-bold text-brand-900">Gallery</h3>
                 <p className="mt-1 text-xs leading-5 text-stone-500">Add close-ups, materials, and different angles.</p>
               </div>
-              <span className="badge border border-abaca-200 bg-canvas text-stone-600">{gallery.length} / 20</span>
+              <span className="badge border border-abaca-200 bg-canvas text-stone-600">{gallery.length} photos</span>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {gallery.map((url, index) => (
@@ -242,20 +237,17 @@ export default function ProductMedia({
                   <p className="mt-1 text-xs text-stone-500">A few photos help buyers appreciate your craft.</p>
                 </div>
               )}
-              {gallery.length < 20 && (
-                <button
-                  type="button"
-                  className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-abaca-300 bg-canvas/50 text-ochre-800 transition hover:border-ochre-500 hover:bg-ochre-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ochre-600"
-                  onClick={() => galleryInput.current?.click()}
-                  disabled={!!busy}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">
-                    <Plus size={19} aria-hidden="true" />
-                  </span>
-                  <span className="mt-2 text-xs font-semibold">Add photos</span>
-                  <span className="mt-1 text-[10px] text-stone-500">{20 - gallery.length} slots left</span>
-                </button>
-              )}
+              <button
+                type="button"
+                className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-abaca-300 bg-canvas/50 text-ochre-800 transition hover:border-ochre-500 hover:bg-ochre-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ochre-600"
+                onClick={() => galleryInput.current?.click()}
+                disabled={!!busy}
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">
+                  <Plus size={19} aria-hidden="true" />
+                </span>
+                <span className="mt-2 text-xs font-semibold">Add photos</span>
+              </button>
             </div>
             <input
               ref={galleryInput}

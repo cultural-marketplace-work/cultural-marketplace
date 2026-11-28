@@ -28,11 +28,18 @@ export interface TutorialSessionDraft {
   provinceCode: string;
   municipalityCode: string;
   barangayCode: string;
-  completeAddress: string;
+  streetAddress: string;
   landmark: string;
   coordinates: { lat: number | null; lng: number | null };
   mapCenter: { lat: number | null; lng: number | null };
   bookedParticipants: number;
+}
+
+export function formatCompleteAddress(parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => part?.trim() ?? '')
+    .filter(Boolean)
+    .join(', ');
 }
 
 function minutesBetween(start: string, end: string): number | null {
@@ -75,6 +82,14 @@ export default function TutorialSessionFields({
   const province = provinceOptions.find((option) => option.code === session.provinceCode)?.name ?? '';
   const municipality = municipalityOptions.find((option) => option.code === session.municipalityCode)?.name ?? '';
   const barangay = barangayOptions.find((option) => option.code === session.barangayCode)?.name ?? '';
+  const completeAddress = formatCompleteAddress([
+    session.venueName,
+    session.streetAddress,
+    barangay,
+    municipality,
+    province,
+    session.landmark.trim() ? `Near ${session.landmark.trim()}` : '',
+  ]);
   const addressKey = province && municipality && barangay
     ? `${session.provinceCode}|${session.municipalityCode}|${session.barangayCode}`
     : '';
@@ -235,8 +250,27 @@ export default function TutorialSessionFields({
         </div>
       </div>
       <div>
+        <label htmlFor={`tutorial-session-street-${session.id}`} className="mb-1.5 block text-sm font-semibold text-stone-700">
+          Street / Unit / Building Details <span className="font-normal text-stone-500">(optional)</span>
+        </label>
+        <input
+          id={`tutorial-session-street-${session.id}`}
+          className="input min-h-11"
+          value={session.streetAddress}
+          onChange={(event) => onUpdate(session.id, { streetAddress: event.target.value })}
+          placeholder="For example: Purok 3, beside the community hall"
+        />
+      </div>
+      <div>
         <label htmlFor={`tutorial-session-address-${session.id}`} className="mb-1.5 block text-sm font-semibold text-stone-700">Complete Address</label>
-        <textarea id={`tutorial-session-address-${session.id}`} className="input min-h-20 resize-y" value={session.completeAddress} onChange={(event) => onUpdate(session.id, { completeAddress: event.target.value })} required />
+        <textarea
+          id={`tutorial-session-address-${session.id}`}
+          className="input min-h-20 resize-y bg-canvas"
+          value={completeAddress}
+          placeholder="Venue, barangay, municipality/city, province, and landmark will appear here."
+          readOnly
+          aria-readonly="true"
+        />
       </div>
       <div>
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-stone-700"><MapPin size={16} aria-hidden="true" /> Location Pin</div>

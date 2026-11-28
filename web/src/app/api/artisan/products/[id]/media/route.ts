@@ -3,10 +3,11 @@ import { getVerifiedArtisanSession } from '@/lib/artisanAuth';
 import { getProduct } from '@/lib/db';
 import { uploadFile, objectPath } from '@/lib/storage';
 import { moderateUpload } from '@/lib/imageModeration';
+import type { Variation } from '@/lib/types';
 
 // Fast, direct product media upload (artisan-owned).
 // Stores under product-media bucket: products/<artisanId>/<productId>/<file>
-// Directly updates the product row (image_path / product_gallery) in the database.
+// Directly updates product image fields and variation photo references in the database.
 const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -34,6 +35,21 @@ function parseGallery(value: unknown): string[] {
   return [];
 }
 
+function parseVariations(value: unknown): Variation[] {
+  if (Array.isArray(value)) return value as Variation[];
+
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed as Variation[];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
 
 export async function POST(req: Request) {
   const session = await getVerifiedArtisanSession();
@@ -45,13 +61,20 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const productId = Number(form.get('productId'));
     const kind = String(form.get('kind') ?? 'main');
+    const rawVariationIndex = form.get('variationIndex');
+    const variationIndex = typeof rawVariationIndex === 'string' && rawVariationIndex.trim()
+      ? Number(rawVariationIndex)
+      : Number.NaN;
     const file = form.get('file') as File | null;
 
     if (!productId || !file) {
       return NextResponse.json({ status: 'error', message: 'productId and file are required.' }, { status: 400 });
     }
-    if (!['main', 'gallery', 'tutorial'].includes(kind)) {
+    if (!['main', 'gallery', 'tutorial', 'variation'].includes(kind)) {
       return NextResponse.json({ status: 'error', message: 'Choose a valid image type.' }, { status: 400 });
+    }
+    if (kind === 'variation' && (!Number.isInteger(variationIndex) || variationIndex < 0)) {
+      return NextResponse.json({ status: 'error', message: 'Choose a valid variation for this image.' }, { status: 400 });
     }
     if (!ALLOWED.includes(file.type)) {
       return NextResponse.json({ status: 'error', message: 'Only JPEG, PNG, or WebP images are allowed.' }, { status: 415 });
@@ -66,6 +89,9 @@ export async function POST(req: Request) {
     }
     if (product.artisan_id !== session.id) {
       return NextResponse.json({ status: 'error', message: 'This product belongs to another artisan.' }, { status: 403 });
+    }
+    if (kind === 'variation' && (!product.variations_data || variationIndex >= product.variations_data.length)) {
+      return NextResponse.json({ status: 'error', message: 'The selected product variation was not found.' }, { status: 404 });
     }
 
     const buf = Buffer.from(await file.arrayBuffer());
@@ -96,16 +122,18 @@ export async function POST(req: Request) {
 
     // Fetch fresh database state directly to prevent stale cached image_path from overwriting main image.
     const currentRows = usingPg
-      ? await sql`select image_path, product_gallery, tutorial_gallery from products where id = ${productId}`
+      ? await sql`select image_path, product_gallery, tutorial_gallery, variations_data from products where id = ${productId}`
       : [{
           image_path: product.image_path,
           product_gallery: product.product_gallery,
           tutorial_gallery: product.tutorial_gallery,
+          variations_data: product.variations_data,
         }];
 
     let new_image_path = (currentRows[0]?.image_path as string) ?? null;
     let new_gallery = parseGallery(currentRows[0]?.product_gallery);
     let new_tutorial_gallery = parseGallery(currentRows[0]?.tutorial_gallery);
+    let new_variations = parseVariations(currentRows[0]?.variations_data);
 
     if (kind === 'main') {
       new_image_path = publicUrl;
@@ -114,9 +142,15 @@ export async function POST(req: Request) {
         publicUrl,
         ...new_tutorial_gallery.slice(1).filter((url) => url !== publicUrl),
       ];
+    } else if (kind === 'variation') {
+      const variation = new_variations[variationIndex];
+      if (!variation) {
+        return NextResponse.json({ status: 'error', message: 'The selected product variation was not found.' }, { status: 409 });
+      }
+      new_variations[variationIndex] = { ...variation, image_path: publicUrl };
+      if (!new_gallery.includes(publicUrl)) new_gallery.push(publicUrl);
     } else {
       if (!new_gallery.includes(publicUrl)) new_gallery.push(publicUrl);
-      new_gallery = new_gallery.slice(0, 20);
     }
 
     if (usingPg) {
@@ -128,6 +162,16 @@ export async function POST(req: Request) {
           returning tutorial_gallery
         `;
         new_tutorial_gallery = parseGallery(updated[0]?.tutorial_gallery);
+      } else if (kind === 'variation') {
+        const updated = await sql`
+          update products
+          set product_gallery = ${JSON.stringify(new_gallery)}::jsonb,
+              variations_data = ${JSON.stringify(new_variations)}::jsonb
+          where id = ${productId}
+          returning product_gallery, variations_data
+        `;
+        new_gallery = parseGallery(updated[0]?.product_gallery);
+        new_variations = parseVariations(updated[0]?.variations_data);
       } else {
         const updated = await sql`
           update products
@@ -142,8 +186,15 @@ export async function POST(req: Request) {
       const { updateProductMediaDemo, updateTutorialMediaDemo } = await import('@/lib/db');
       if (kind === 'tutorial') {
         updateTutorialMediaDemo(productId, new_tutorial_gallery);
+        const { saveDemoTutorialGallery } = await import('@/lib/demoTutorialImages');
+        await saveDemoTutorialGallery(productId, new_tutorial_gallery);
       } else {
-        updateProductMediaDemo(productId, new_image_path, new_gallery);
+        updateProductMediaDemo(
+          productId,
+          new_image_path,
+          new_gallery,
+          kind === 'variation' ? new_variations : undefined
+        );
       }
     }
 
@@ -156,6 +207,7 @@ export async function POST(req: Request) {
       image_path: new_image_path,
       product_gallery: new_gallery,
       tutorial_gallery: new_tutorial_gallery,
+      variations_data: new_variations,
       url: publicUrl,
     });
   } catch (e) {

@@ -71,7 +71,6 @@ function isTutorialSession(value: unknown, maximumParticipants: number): boolean
     && typeof session.location === 'string'
     && Boolean(session.location.trim())
     && typeof session.venue_street === 'string'
-    && Boolean(session.venue_street.trim())
     && typeof session.venue_province === 'string'
     && Boolean(session.venue_province.trim())
     && typeof session.venue_barangay === 'string'

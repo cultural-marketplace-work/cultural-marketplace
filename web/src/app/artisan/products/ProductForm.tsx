@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
   AlertCircle,
@@ -15,9 +16,15 @@ import {
   Save,
   Trash2,
   LoaderCircle,
+  X,
 } from 'lucide-react';
 import type { Variation, TutorialDate } from '@/lib/types';
 import type { LocationData } from '@/components/MapPinPicker';
+import { LogoLoadingOverlay } from '@/components/LogoLoading';
+import { compressImage } from '@/lib/imageCompress';
+
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const MapPinPicker = dynamic(() => import('@/components/MapPinPicker'), {
   ssr: false,
@@ -63,6 +70,7 @@ export default function ProductForm({
   initialHasVariations,
   initialVariations,
   initialTutorialDates,
+  tutorialManagedSeparately = false,
 }: {
   mode: 'create' | 'edit';
   productId?: number;
@@ -71,6 +79,7 @@ export default function ProductForm({
   initialHasVariations?: boolean;
   initialVariations?: Variation[];
   initialTutorialDates?: TutorialDate[];
+  tutorialManagedSeparately?: boolean;
 }) {
   const initialCat = (initial?.category ?? '').trim();
   const legacyCat =
@@ -100,6 +109,9 @@ export default function ProductForm({
 
   const [hasVariations, setHasVariations] = useState(initialHasVariations ?? false);
   const [variations, setVariations] = useState<Variation[]>(initialVariations ?? []);
+  const [variationPhotoFiles, setVariationPhotoFiles] = useState<Array<File | null>>(
+    () => initialVariations?.map(() => null) ?? []
+  );
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
 
@@ -117,7 +129,53 @@ export default function ProductForm({
   );
 
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [createdProductId, setCreatedProductId] = useState<number | null>(null);
+  const [hasUploadedCover, setHasUploadedCover] = useState(false);
+  const [galleryPhotos, setGalleryPhotos] = useState<File[]>([]);
+  const [tutorialPromptOpen, setTutorialPromptOpen] = useState(false);
+  const tutorialPromptRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tutorialPromptOpen) return;
+
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const dialog = tutorialPromptRef.current;
+    document.body.style.overflow = 'hidden';
+    dialog?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+
+    function handleDialogKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setTutorialPromptOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ));
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleDialogKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [tutorialPromptOpen]);
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -154,14 +212,71 @@ export default function ProductForm({
     }));
   }
 
+  async function uploadProductPhoto(
+    productId: number,
+    file: File,
+    kind: 'main' | 'gallery' | 'variation',
+    variationIndex?: number
+  ): Promise<string> {
+    const compressedFile = await compressImage(file, 1200, 1200, 0.8);
+    if (compressedFile.size > MAX_UPLOAD_BYTES) {
+      throw new Error(`${file.name} is still larger than 8 MB after compression.`);
+    }
+
+    const formData = new FormData();
+    formData.append('productId', String(productId));
+    formData.append('kind', kind);
+    if (kind === 'variation' && variationIndex != null) {
+      formData.append('variationIndex', String(variationIndex));
+    }
+    formData.append('file', compressedFile);
+    const response = await fetch(`/api/artisan/products/${productId}/media`, {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json() as {
+      status?: string;
+      message?: string;
+      url?: string;
+    };
+    if (!response.ok || data.status !== 'success') {
+      throw new Error(data.message || `Could not upload ${file.name}.`);
+    }
+    if (!data.url) {
+      throw new Error(`The photo ${file.name} uploaded but its address could not be confirmed.`);
+    }
+    return data.url;
+  }
+
+  async function uploadVariationPhotos(productId: number, formIndexes: number[]) {
+    for (const [variationIndex, formIndex] of formIndexes.entries()) {
+      const photo = variationPhotoFiles[formIndex];
+      if (!photo) continue;
+
+      const imagePath = await uploadProductPhoto(productId, photo, 'variation', variationIndex);
+      setVariations((current) => current.map((variation, index) => (
+        index === formIndex ? { ...variation, image_path: imagePath } : variation
+      )));
+      setVariationPhotoFiles((current) => current.map((file, index) => (
+        index === formIndex ? null : file
+      )));
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     setError('');
+    setSaved(false);
 
+    const validVariationEntries = hasVariations
+      ? variations
+          .map((variation, index) => ({ variation, index }))
+          .filter(({ variation }) => variation.name?.trim() && (variation.typeLabel || '').trim())
+      : [];
     const validVariations = hasVariations
-      ? variations.filter((v) => v.name?.trim() && (v.typeLabel || '').trim())
+      ? validVariationEntries.map(({ variation }) => variation)
       : null;
 
     if (hasVariations && (!validVariations || validVariations.length === 0)) {
@@ -177,23 +292,41 @@ export default function ProductForm({
       return;
     }
 
+    const {
+      has_tutorial,
+      tutorial_title,
+      tutorial_description,
+      tutorial_price: formTutorialPrice,
+      tutorial_capacity,
+      tutorial_fee_type,
+      tutorial_location,
+      tutorial_lat,
+      tutorial_lng,
+      ...creationFields
+    } = form;
     const payload: Record<string, unknown> = {
-      ...form,
+      ...creationFields,
+      ...(tutorialManagedSeparately ? {} : {
+        has_tutorial,
+        tutorial_title,
+        tutorial_description,
+        tutorial_price:
+          has_tutorial && formTutorialPrice !== ''
+            ? Number(formTutorialPrice)
+            : null,
+        tutorial_capacity:
+          has_tutorial && tutorial_capacity !== ''
+            ? Number(tutorial_capacity)
+            : null,
+        tutorial_fee_type,
+        tutorial_location: has_tutorial ? tutorial_location || null : null,
+        tutorial_lat: has_tutorial ? tutorial_lat : null,
+        tutorial_lng: has_tutorial ? tutorial_lng : null,
+        tutorial_dates: has_tutorial ? tutorialDates : null,
+      }),
       category: effectiveCategory,
       price: Number(form.price) || 0,
       stock_quantity: Number(form.stock_quantity) || 0,
-      tutorial_price:
-        form.has_tutorial && form.tutorial_price !== ''
-          ? Number(form.tutorial_price)
-          : null,
-      tutorial_capacity:
-        form.has_tutorial && form.tutorial_capacity !== ''
-          ? Number(form.tutorial_capacity)
-          : null,
-      tutorial_location: form.has_tutorial ? form.tutorial_location || null : null,
-      tutorial_lat: form.has_tutorial ? form.tutorial_lat : null,
-      tutorial_lng: form.has_tutorial ? form.tutorial_lng : null,
-      tutorial_dates: form.has_tutorial ? tutorialDates : null,
       has_variations: hasVariations,
       variations_data: validVariations,
       materials_used: form.materials_used ? form.materials_used.trim() : null,
@@ -201,17 +334,52 @@ export default function ProductForm({
 
     try {
       if (mode === 'create') {
-        const res = await fetch('/api/artisan/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (!res.ok || data.status !== 'success') {
-          throw new Error(data.message || 'Could not save your creation. Please check the details and try again.');
+        let savedProductId = createdProductId;
+        if (savedProductId == null) {
+          const res = await fetch('/api/artisan/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok || data.status !== 'success') {
+            throw new Error(data.message || 'Could not save your creation. Please check the details and try again.');
+          }
+          savedProductId = Number(data.id);
+          if (!Number.isSafeInteger(savedProductId) || savedProductId <= 0) {
+            throw new Error('Your product was saved, but its ID could not be confirmed. Refresh your products page before trying again.');
+          }
+          setCreatedProductId(savedProductId);
+        } else {
+          const res = await fetch(`/api/artisan/products/${savedProductId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok || data.status !== 'success') {
+            throw new Error(data.message || 'Could not save your product changes.');
+          }
         }
-        router.push(`/artisan/products/${data.id}/media-setup`);
+
+        let photosToUpload = [...galleryPhotos];
+        if (!hasUploadedCover && photosToUpload.length > 0) {
+          await uploadProductPhoto(savedProductId, photosToUpload[0], 'main');
+          setHasUploadedCover(true);
+          photosToUpload = photosToUpload.slice(1);
+          setGalleryPhotos(photosToUpload);
+        }
+        for (const photo of photosToUpload) {
+          await uploadProductPhoto(savedProductId, photo, 'gallery');
+          setGalleryPhotos((current) => current.filter((item) => item !== photo));
+        }
+        await uploadVariationPhotos(savedProductId, validVariationEntries.map(({ index }) => index));
+        setSaved(true);
+        setTutorialPromptOpen(true);
       } else {
+        if (productId == null) {
+          throw new Error('The product ID is missing. Refresh the page and try again.');
+        }
         const res = await fetch(`/api/artisan/products/${productId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -221,7 +389,13 @@ export default function ProductForm({
         if (!res.ok || data.status !== 'success') {
           throw new Error(data.message || 'Could not save your changes. Please try again.');
         }
-        router.push('/artisan/products');
+        await uploadVariationPhotos(productId, validVariationEntries.map(({ index }) => index));
+        if (tutorialManagedSeparately) {
+          setSaved(true);
+          router.refresh();
+        } else {
+          router.push('/artisan/products');
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
@@ -231,15 +405,34 @@ export default function ProductForm({
   }
 
   return (
-    <form onSubmit={submit} aria-busy={busy} className="mt-6 space-y-5">
+    <form
+      onSubmit={submit}
+      onChangeCapture={() => {
+        if (mode === 'create') setSaved(false);
+      }}
+      aria-busy={busy}
+      className="mt-6 space-y-5"
+    >
+      {busy && (
+        <LogoLoadingOverlay
+          message={mode === 'create' ? 'Saving product and photos…' : 'Saving product…'}
+        />
+      )}
       {error && (
         <div role="alert" className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-800">
           <AlertCircle size={19} className="mt-0.5 shrink-0" aria-hidden="true" />
           <div>
-            <p className="font-bold">We couldn&apos;t save this listing</p>
+            <p className="font-bold">
+              {mode === 'create' && createdProductId ? 'Product created; changes or photo uploads need attention' : "We couldn't save this listing"}
+            </p>
             <p className="mt-0.5 leading-5">{error}</p>
           </div>
         </div>
+      )}
+      {saved && (
+        <p role="status" className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+          {mode === 'create' ? 'Product details and photos saved.' : 'Product details saved.'}
+        </p>
       )}
 
       <div className="flex flex-col gap-3 rounded-2xl border border-abaca-200/80 bg-gradient-to-r from-white to-[#fffaf0] p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
@@ -483,11 +676,46 @@ export default function ProductForm({
                     />
                   </div>
 
+                  <div className="w-full border-t border-abaca-100 pt-3">
+                    <label htmlFor={`variation-photo-${idx}`} className="block text-xs font-semibold text-stone-700">
+                      Photo for this choice <span className="font-normal text-stone-500">(optional)</span>
+                    </label>
+                    <input
+                      id={`variation-photo-${idx}`}
+                      className="input mt-1.5 min-h-11 bg-white text-sm"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={busy}
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0] ?? null;
+                        event.currentTarget.value = '';
+                        if (file && !ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+                          setError('Choose a JPEG, PNG, or WebP photo for each variation.');
+                          return;
+                        }
+                        setError('');
+                        setVariationPhotoFiles((current) => current.map((item, index) => (
+                          index === idx ? file : item
+                        )));
+                      }}
+                    />
+                    <p className="mt-1 text-[11px] leading-5 text-stone-500">
+                      {variationPhotoFiles[idx]
+                        ? `${variationPhotoFiles[idx]?.name} will be added to the product gallery and shown when selected.`
+                        : v.image_path
+                          ? 'A photo is already saved for this choice. Select another to replace it.'
+                          : 'Customers will see this photo in the gallery when they choose this option.'}
+                    </p>
+                  </div>
+
                   <button
                     type="button"
                     className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-stone-200 px-3 text-xs font-semibold text-stone-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
                     aria-label={`Remove ${v.typeLabel || 'option'} ${v.name || ''}`}
-                    onClick={() => setVariations((vs) => vs.filter((_, i) => i !== idx))}
+                    onClick={() => {
+                      setVariations((vs) => vs.filter((_, i) => i !== idx));
+                      setVariationPhotoFiles((files) => files.filter((_, i) => i !== idx));
+                    }}
                   >
                     <Trash2 size={15} aria-hidden="true" /> Remove
                   </button>
@@ -505,6 +733,7 @@ export default function ProductForm({
                     ? { name: '', stock: 10, price: 0, type: last.type, typeLabel: last.typeLabel }
                     : { name: '', stock: 10, price: 0, type: 'size', typeLabel: 'Size' },
                 ]);
+                setVariationPhotoFiles((files) => [...files, null]);
               }}
             >
               <Plus size={16} aria-hidden="true" /> Add another option
@@ -514,7 +743,73 @@ export default function ProductForm({
         </div>
       </section>
 
-      {mode === 'edit' && (
+      {mode === 'create' && (
+        <section className="overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/95 shadow-sm">
+          <div className="flex items-start gap-3 border-b border-stone-100 bg-canvas/70 px-4 py-4 sm:px-6">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ochre-100 text-ochre-900">
+              <Camera size={17} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="font-serif text-lg font-bold text-brand-900">Product photos</h2>
+              <p className="mt-0.5 text-xs leading-5 text-stone-500">
+                Choose a cover photo and optional gallery images. They will upload when you save the product.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3 p-4 sm:p-6">
+            <div>
+              <label htmlFor="new-product-photos" className="mb-1.5 block text-sm font-semibold text-stone-700">
+                Product photos <span className="font-normal text-stone-500">(optional)</span>
+              </label>
+              <input
+                id="new-product-photos"
+                className="input min-h-11"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                disabled={busy}
+                onChange={(event) => {
+                  const files = Array.from(event.currentTarget.files ?? []);
+                  event.currentTarget.value = '';
+                  if (!files.length) return;
+                  if (files.some((file) => !ACCEPTED_IMAGE_TYPES.includes(file.type))) {
+                    setError('Choose only JPEG, PNG, or WebP product photos.');
+                    return;
+                  }
+                  setError('');
+                  setSaved(false);
+                  setGalleryPhotos((current) => [...current, ...files]);
+                }}
+              />
+              <p className="mt-1.5 text-xs leading-5 text-stone-500">
+                The first photo you choose becomes the cover photo. Any remaining photos are added to the gallery.
+              </p>
+            </div>
+            {galleryPhotos.length > 0 && (
+              <ul className="space-y-1.5">
+                {galleryPhotos.map((photo, index) => (
+                  <li key={`${photo.name}-${photo.lastModified}-${index}`} className="flex items-center justify-between gap-2 text-xs text-stone-600">
+                    <span className="truncate">{photo.name}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 font-semibold text-crimson-700 hover:text-crimson-900"
+                      disabled={busy}
+                      onClick={() => {
+                        setSaved(false);
+                        setGalleryPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index));
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {mode === 'edit' && !tutorialManagedSeparately && (
       <section className="overflow-hidden rounded-2xl border border-abaca-200/80 bg-white/95 shadow-sm">
         <div className="flex flex-col gap-4 bg-gradient-to-r from-[#fffaf0] to-white p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
           <div className="flex items-start gap-3">
@@ -720,7 +1015,7 @@ export default function ProductForm({
       <div className="flex flex-col gap-3 rounded-2xl border border-abaca-200/80 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <p className="text-xs leading-5 text-stone-500">
           {mode === 'create'
-            ? 'After saving, you can add a tutorial, then add photos and an NFC authenticity tag.'
+            ? 'Your product details and selected photos save together. You can offer a tutorial afterward.'
             : 'Your changes will appear on your marketplace listing.'}
         </p>
         <button
@@ -729,9 +1024,65 @@ export default function ProductForm({
           type="submit"
         >
           {busy ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Save size={17} aria-hidden="true" />}
-          {busy ? 'Saving…' : mode === 'create' ? 'Save product' : 'Save changes'}
+          {busy ? 'Saving…' : mode === 'create' ? 'Save Product' : 'Save changes'}
         </button>
       </div>
+
+      {mode === 'create' && saved && createdProductId != null && tutorialPromptOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-charcoal-950/60 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTutorialPromptOpen(false);
+          }}
+        >
+          <div
+            ref={tutorialPromptRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tutorial-prompt-title"
+            aria-describedby="tutorial-prompt-description"
+            tabIndex={-1}
+            className="relative w-full max-w-md rounded-2xl border border-abaca-200 bg-white p-6 shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setTutorialPromptOpen(false)}
+              className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full text-stone-500 transition hover:bg-canvas hover:text-stone-800"
+              aria-label="Close tutorial prompt"
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ochre-50 text-ochre-800">
+              <CalendarDays size={23} aria-hidden="true" />
+            </span>
+            <h2 id="tutorial-prompt-title" className="mt-4 pr-8 font-serif text-xl font-bold text-brand-900">
+              Would you like to offer a tutorial for this item?
+            </h2>
+            <p id="tutorial-prompt-description" className="mt-2 text-sm leading-6 text-stone-600">
+              Your product and photos are saved. You can now add a tutorial, or finish without one and add it later.
+            </p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+              <Link
+                href={`/artisan/products/${createdProductId}/tutorial`}
+                data-autofocus
+                className="btn-primary min-h-11 flex-1 justify-center px-4"
+              >
+                Offer a tutorial
+              </Link>
+              <Link href="/artisan/products" className="btn-outline min-h-11 flex-1 justify-center px-4">
+                Finish without one
+              </Link>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTutorialPromptOpen(false)}
+              className="mt-4 min-h-10 w-full rounded-xl px-3 text-sm font-semibold text-stone-600 transition hover:bg-canvas"
+            >
+              Decide later
+            </button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

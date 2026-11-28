@@ -6,6 +6,7 @@ import { getProduct, listCategories } from '@/lib/db';
 import ProductForm from '../../ProductForm';
 import ProductMedia from './ProductMedia';
 import NfcSection from '@/components/NfcSection';
+import TutorialDetailsEditor from '@/app/artisan/products/[id]/tutorial/TutorialDetailsEditor';
 import { ArrowLeft, ArrowUpRight, CalendarDays, Camera, FilePenLine, ShieldCheck } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -35,9 +36,15 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
             Workshops
           </Link>
           {product.has_tutorial && (
-            <Link href={`/artisan/tutorial-attendees/${product.id}`} className="btn-outline min-h-10 px-3 text-xs">
-              Workshop attendees
-            </Link>
+            <>
+              <a href="#tutorial-details" className="btn-outline min-h-10 px-3 text-xs">
+                <CalendarDays size={14} aria-hidden="true" />
+                Edit tutorial details
+              </a>
+              <Link href={`/artisan/tutorial-attendees/${product.id}`} className="btn-outline min-h-10 px-3 text-xs">
+                Workshop attendees
+              </Link>
+            </>
           )}
           <Link
             href={`/customer/browse/${product.id}`}
@@ -88,6 +95,9 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           <a href="#details" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20">
             <FilePenLine size={15} aria-hidden="true" /> Craft details
           </a>
+          <a href="#tutorial-details" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20">
+            <CalendarDays size={15} aria-hidden="true" /> Tutorial details
+          </a>
         </nav>
       </section>
 
@@ -134,7 +144,28 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           initialHasVariations={product.has_variations}
           initialVariations={product.variations_data ?? []}
           initialTutorialDates={product.tutorial_dates ?? []}
+          tutorialManagedSeparately
         />
+      </section>
+
+      <section id="tutorial-details" aria-label="Tutorial details" className="mx-auto w-full max-w-5xl">
+        <details
+          open={product.has_tutorial}
+          className="overflow-hidden rounded-2xl border border-abaca-200 bg-white shadow-sm"
+        >
+          <summary className="cursor-pointer bg-canvas/70 px-4 py-4 font-serif text-lg font-bold text-brand-900 sm:px-6">
+            {product.has_tutorial ? 'Edit tutorial details' : 'Add a tutorial (optional)'}
+            <span className="mt-1 block font-sans text-xs font-normal leading-5 text-stone-600">
+              Use the same tutorial information, image, participant, venue, schedule, and policy fields as tutorial setup.
+            </span>
+          </summary>
+          <div className="border-t border-abaca-200 p-4 sm:p-6">
+            <TutorialDetailsEditor
+              product={product}
+              returnTo={`/artisan/products/edit/${product.id}`}
+            />
+          </div>
+        </details>
       </section>
     </main>
   );
