@@ -4,13 +4,71 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Camera, Check, LoaderCircle, Plus, Save, Upload } from 'lucide-react';
+import { LogoLoadingOverlay } from '@/components/LogoLoading';
 import { compressImage } from '@/lib/imageCompress';
 import type { TutorialDate, TutorialDetails } from '@/lib/types';
-import TutorialSessionFields, { type TutorialAddressOption, type TutorialSessionDraft } from './TutorialSessionFields';
+import TutorialSessionFields, {
+  formatCompleteAddress,
+  type TutorialAddressOption,
+  type TutorialSessionDraft,
+} from './TutorialSessionFields';
 
 const OTHER = 'Other / enter manually';
 const CRAFT_CATEGORIES = ['Weaving', 'Beadwork', 'Woodcraft', 'Pottery', 'Basketry', 'Embroidery', 'Other'];
 const LANGUAGES = ['Cebuano', 'Filipino', 'English'];
+const PARTICIPANT_RECEIVE_OPTIONS = [
+  'Hands-on crafting materials',
+  'Crafting tools and equipment',
+  'Finished handmade craft',
+  'Take-home craft kit',
+  'Learning materials or handouts',
+  'Snacks and refreshments',
+  'Certificate of participation',
+  'Traditional cultural demonstration',
+  'Personalized guidance from the artisan',
+];
+const DEFAULT_PARTICIPANT_RECEIVE_OPTIONS = [
+  'Hands-on crafting materials',
+  'Finished handmade craft',
+];
+
+function parseParticipantReceives(value?: string | null) {
+  const entries = value?.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean) ?? [];
+  if (!entries.length) {
+    return {
+      selected: DEFAULT_PARTICIPANT_RECEIVE_OPTIONS,
+      otherEnabled: false,
+      otherText: '',
+    };
+  }
+
+  const selected: string[] = [];
+  const otherEntries: string[] = [];
+  let otherEnabled = false;
+  for (const entry of entries) {
+    if (entry.toLowerCase() === 'other') {
+      otherEnabled = true;
+      continue;
+    }
+    if (entry.toLowerCase().startsWith('other:')) {
+      otherEnabled = true;
+      const otherText = entry.slice('other:'.length).trim();
+      if (otherText) otherEntries.push(otherText);
+      continue;
+    }
+    const option = PARTICIPANT_RECEIVE_OPTIONS.find(
+      (item) => item.toLowerCase() === entry.toLowerCase()
+    );
+    if (option) selected.push(option);
+    else otherEntries.push(entry);
+  }
+
+  return {
+    selected,
+    otherEnabled: otherEnabled || otherEntries.length > 0,
+    otherText: otherEntries.join('\n'),
+  };
+}
 
 function optionOrOther(value: string | undefined, options: string[]) {
   return value && options.includes(value) ? value : value ? OTHER : '';
@@ -47,6 +105,7 @@ export default function TutorialDetailsForm({
   initialTutorialDates,
   bookedParticipantsBySession,
   addressOptions,
+  returnTo = '/artisan/products',
 }: {
   productId: number;
   commissionRate: number;
@@ -62,6 +121,7 @@ export default function TutorialDetailsForm({
   initialTutorialDates: TutorialDate[];
   bookedParticipantsBySession: number[];
   addressOptions: TutorialAddressOption[];
+  returnTo?: string;
 }) {
   const router = useRouter();
   const imageInput = useRef<HTMLInputElement>(null);
@@ -91,7 +151,10 @@ export default function TutorialDetailsForm({
     initialDetails?.materials_provided ?? 'all'
   );
   const [materialsRequirements, setMaterialsRequirements] = useState(initialDetails?.materials_requirements ?? '');
-  const [participantsReceive, setParticipantsReceive] = useState(initialDetails?.participants_receive ?? '');
+  const initialParticipantReceives = parseParticipantReceives(initialDetails?.participants_receive);
+  const [selectedParticipantReceives, setSelectedParticipantReceives] = useState(initialParticipantReceives.selected);
+  const [otherReceiveEnabled, setOtherReceiveEnabled] = useState(initialParticipantReceives.otherEnabled);
+  const [otherReceive, setOtherReceive] = useState(initialParticipantReceives.otherText);
   const [sessions, setSessions] = useState<TutorialSessionDraft[]>(() => {
     const dates = initialTutorialDates.length ? initialTutorialDates : [null];
     return dates.map((date, index) => {
@@ -126,7 +189,7 @@ export default function TutorialDetailsForm({
         provinceCode,
         municipalityCode,
         barangayCode,
-        completeAddress: date?.venue_street ?? initialDetails?.complete_address ?? '',
+        streetAddress: date?.venue_street ?? '',
         landmark: date?.venue_landmark ?? initialDetails?.landmark ?? '',
         coordinates,
         mapCenter: coordinates,
@@ -149,6 +212,7 @@ export default function TutorialDetailsForm({
   const [attendanceInstructions, setAttendanceInstructions] = useState(initialDetails?.attendance_instructions ?? '');
   const [additionalNotes, setAdditionalNotes] = useState(initialDetails?.additional_notes ?? '');
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -220,6 +284,7 @@ export default function TutorialDetailsForm({
     event.preventDefault();
     if (busy || uploading) return;
     setError('');
+    setSaved(false);
 
     const maxParticipants = Number(maximumParticipants);
     const minParticipants = minimumParticipants ? Number(minimumParticipants) : null;
@@ -282,6 +347,18 @@ export default function TutorialDetailsForm({
       setError('Add at least one learning outcome.');
       return;
     }
+    if (otherReceiveEnabled && !otherReceive.trim()) {
+      setError('Enter the item participants will receive for Other.');
+      return;
+    }
+    const participantReceives = [
+      ...PARTICIPANT_RECEIVE_OPTIONS.filter((option) => selectedParticipantReceives.includes(option)),
+      ...(otherReceiveEnabled ? [`Other: ${otherReceive.trim()}`] : []),
+    ];
+    if (!participantReceives.length) {
+      setError('Select at least one item participants will receive.');
+      return;
+    }
 
     setBusy(true);
     try {
@@ -313,12 +390,19 @@ export default function TutorialDetailsForm({
         languages: languageList,
         materials_provided: materialsProvided,
         materials_requirements: materialsRequirements.trim(),
-        participants_receive: participantsReceive.trim(),
+        participants_receive: participantReceives.join('\n'),
         venue_name: primarySession.venueName.trim(),
         province: primaryAddress.province,
         municipality: primaryAddress.municipality,
         barangay: primaryAddress.barangay,
-        complete_address: primarySession.completeAddress.trim(),
+        complete_address: formatCompleteAddress([
+          primarySession.venueName,
+          primarySession.streetAddress,
+          primaryAddress.barangay,
+          primaryAddress.municipality,
+          primaryAddress.province,
+          primarySession.landmark.trim() ? `Near ${primarySession.landmark.trim()}` : '',
+        ]),
         landmark: primarySession.landmark.trim(),
         fee_inclusion: feeInclusion.trim(),
         cancellation_policy: cancellationPolicy.trim(),
@@ -356,15 +440,15 @@ export default function TutorialDetailsForm({
               time_end: session.endTime,
               available_slots: Number(session.availableSlots),
               registration_deadline: session.registrationDeadline,
-              location: [
+              location: formatCompleteAddress([
                 session.venueName.trim(),
-                session.completeAddress.trim(),
+                session.streetAddress,
                 address.barangay,
                 address.municipality,
                 address.province,
                 session.landmark.trim() ? `Near ${session.landmark.trim()}` : '',
-              ].filter(Boolean).join(', '),
-              venue_street: session.completeAddress.trim(),
+              ]),
+              venue_street: session.streetAddress.trim(),
               venue_province: address.province,
               venue_barangay: address.barangay,
               venue_municipality: address.municipality,
@@ -380,7 +464,12 @@ export default function TutorialDetailsForm({
       if (!response.ok || data.status !== 'success') {
         throw new Error(data.message || 'Could not save your tutorial. Please try again.');
       }
-      router.push('/artisan/products');
+      if (returnTo === `/artisan/products/edit/${productId}`) {
+        setSaved(true);
+        router.refresh();
+      } else {
+        router.push(returnTo);
+      }
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Something went wrong. Please try again.');
     } finally {
@@ -390,11 +479,17 @@ export default function TutorialDetailsForm({
 
   return (
     <form onSubmit={submit} aria-busy={busy} className="mt-6 space-y-5">
+      {busy && <LogoLoadingOverlay message="Saving tutorial…" />}
       {error && (
         <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertCircle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
           {error}
         </div>
+      )}
+      {saved && (
+        <p role="status" className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+          Tutorial details saved.
+        </p>
       )}
 
       <section className="space-y-5 rounded-2xl border border-abaca-200 bg-white p-5 shadow-sm">
@@ -478,7 +573,7 @@ export default function TutorialDetailsForm({
               setMaximumParticipants(nextValue);
               if (nextValue) {
                 setSessions((current) => current.map((session) => (
-                  Number(session.availableSlots) > Number(nextValue)
+                  !session.availableSlots || Number(session.availableSlots) > Number(nextValue)
                     ? { ...session, availableSlots: nextValue }
                     : session
                 )));
@@ -523,10 +618,46 @@ export default function TutorialDetailsForm({
           <label htmlFor="tutorial-requirements" className="mb-1.5 block text-sm font-semibold text-stone-700">Materials / Requirements</label>
           <textarea id="tutorial-requirements" className="input min-h-24 resize-y leading-6" value={materialsRequirements} onChange={(event) => setMaterialsRequirements(event.target.value)} required />
         </div>
-        <div>
-          <label htmlFor="tutorial-receive" className="mb-1.5 block text-sm font-semibold text-stone-700">What Participants Will Receive</label>
-          <textarea id="tutorial-receive" className="input min-h-24 resize-y leading-6" value={participantsReceive} onChange={(event) => setParticipantsReceive(event.target.value)} placeholder="For example: finished craft, practice materials, or a learning guide" required />
-        </div>
+        <fieldset>
+          <legend className="mb-1.5 text-sm font-semibold text-stone-700">What Participants Will Receive</legend>
+          <p className="mb-3 text-xs text-stone-500">Choose all that apply.</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {PARTICIPANT_RECEIVE_OPTIONS.map((option) => (
+              <label key={option} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-abaca-200 px-3 text-sm text-stone-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-crimson-600"
+                  checked={selectedParticipantReceives.includes(option)}
+                  onChange={() => setSelectedParticipantReceives((current) => (
+                    current.includes(option)
+                      ? current.filter((item) => item !== option)
+                      : [...current, option]
+                  ))}
+                />
+                {option}
+              </label>
+            ))}
+            <label className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-abaca-200 px-3 text-sm text-stone-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-crimson-600"
+                checked={otherReceiveEnabled}
+                onChange={(event) => setOtherReceiveEnabled(event.target.checked)}
+              />
+              Other
+            </label>
+          </div>
+          {otherReceiveEnabled && (
+            <input
+              className="input mt-2 min-h-11"
+              aria-label="Other item participants will receive"
+              value={otherReceive}
+              onChange={(event) => setOtherReceive(event.target.value)}
+              placeholder="Describe another item participants will receive"
+              required
+            />
+          )}
+        </fieldset>
       </section>
 
       <section className="space-y-5">
@@ -605,7 +736,14 @@ export default function TutorialDetailsForm({
       </section>
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-        <Link href={`/artisan/products/${productId}/tutorial-option`} className="btn-outline min-h-11 justify-center px-4">Back</Link>
+        <Link
+          href={returnTo === `/artisan/products/edit/${productId}`
+            ? returnTo
+            : '/artisan/products'}
+          className="btn-outline min-h-11 justify-center px-4"
+        >
+          Back
+        </Link>
         <button type="submit" disabled={busy || uploading} className="btn-primary min-h-11 justify-center px-5">
           {busy || uploading ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Save size={17} aria-hidden="true" />}
           {uploading ? 'Uploading image…' : busy ? 'Saving…' : 'Save tutorial and continue'}

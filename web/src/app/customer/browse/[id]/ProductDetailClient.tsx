@@ -1,226 +1,277 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Languages,
+  MapPin,
+  MessageCircle,
+  Minus,
+  PackageCheck,
+  Plus,
+  Sparkles,
+  UsersRound,
+  X,
+} from 'lucide-react';
 import { useToast } from '@/components/Toast';
-import type { Product } from '@/lib/types';
+import type { Product, TutorialDate } from '@/lib/types';
+import { useProductVariationImage } from './ProductVariationImageContext';
+import ExperienceMap from './ExperienceMap';
 
-interface QuantityStepperProps {
-  value: number;
-  min?: number;
-  max: number;
-  onChange: (v: number) => void;
-  disabled?: boolean;
-  label?: string;
-  stockLabel?: string;
-}
+type PurchaseView = 'product' | 'workshop';
+type PurchaseType = 'product' | 'workshop';
 
 function QuantityStepper({
   value,
-  min = 1,
   max,
+  label,
   onChange,
   disabled = false,
-  label = 'Quantity to Order',
-  stockLabel,
-}: QuantityStepperProps) {
-  const safeMax = Math.max(min, max);
-
+}: {
+  value: number;
+  max: number;
+  label: string;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-abaca-200 bg-canvas/40 p-3.5">
-      <div className="min-w-0">
-        <label className="block text-xs font-bold uppercase tracking-wider text-charcoal-800">
-          {label}
-        </label>
-        {stockLabel && (
-          <p className="mt-0.5 text-[11px] text-stone-500 font-medium truncate">
-            {stockLabel}
-          </p>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="flex items-center rounded-xl border border-abaca-300 bg-white shadow-2xs overflow-hidden">
-          <button
-            type="button"
-            onClick={() => onChange(Math.max(min, value - 1))}
-            disabled={disabled || value <= min}
-            className="flex h-9 w-9 items-center justify-center text-base font-bold text-charcoal-700 hover:bg-ochre-50 active:bg-ochre-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
-            aria-label="Decrease quantity"
-          >
-            −
-          </button>
-          <input
-            type="number"
-            min={min}
-            max={safeMax}
-            value={value}
-            disabled={disabled}
-            onChange={(e) => {
-              const val = parseInt(e.target.value, 10);
-              if (!isNaN(val)) onChange(Math.min(safeMax, Math.max(min, val)));
-            }}
-            className="w-12 text-center text-sm font-bold text-charcoal-900 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-          <button
-            type="button"
-            onClick={() => onChange(Math.min(safeMax, value + 1))}
-            disabled={disabled || value >= safeMax}
-            className="flex h-9 w-9 items-center justify-center text-base font-bold text-charcoal-700 hover:bg-ochre-50 active:bg-ochre-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
-            aria-label="Increase quantity"
-          >
-            +
-          </button>
-        </div>
-
-        {value >= safeMax && safeMax > 0 && (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ochre-800 bg-ochre-100 px-2 py-1 rounded-md border border-ochre-200">
-            Max
-          </span>
-        )}
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-abaca-200 bg-canvas px-3 py-2.5">
+      <span className="text-sm font-semibold text-charcoal-800">{label}</span>
+      <div className="flex items-center overflow-hidden rounded-lg border border-abaca-300 bg-white">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(1, value - 1))}
+          disabled={disabled || value <= 1}
+          aria-label={`Decrease ${label.toLowerCase()}`}
+          className="flex h-10 w-10 items-center justify-center text-charcoal-700 transition hover:bg-ochre-50 disabled:opacity-40"
+        >
+          <Minus size={15} aria-hidden="true" />
+        </button>
+        <span className="min-w-10 text-center text-sm font-bold text-charcoal-900" aria-live="polite">
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(max, value + 1))}
+          disabled={disabled || value >= max}
+          aria-label={`Increase ${label.toLowerCase()}`}
+          className="flex h-10 w-10 items-center justify-center text-charcoal-700 transition hover:bg-ochre-50 disabled:opacity-40"
+        >
+          <Plus size={15} aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
 }
 
-export default function ProductDetailClient({ product, loggedIn }: { product: Product; loggedIn: boolean }) {
+function sessionVenue(date: TutorialDate, fallback?: string | null) {
+  if (date.location?.trim()) return date.location;
+  const parts = [
+    date.venue_meeting_place,
+    date.venue_street,
+    date.venue_barangay,
+    date.venue_municipality,
+    date.venue_province,
+  ].filter((part): part is string => Boolean(part?.trim()));
+  return parts.join(', ') || fallback || 'Venue details will be shared by the artisan';
+}
+
+function formatSessionDate(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-PH', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+export default function ProductDetailClient({
+  product,
+  loggedIn,
+  view,
+  artisanPhone,
+}: {
+  product: Product;
+  loggedIn: boolean;
+  view: PurchaseView;
+  artisanPhone?: string | null;
+}) {
   const router = useRouter();
-  const [mode, setMode] = useState<'product' | 'workshop' | 'bundle'>('product');
-  const [selectedVariants, setSelectedVariants] = useState<Record<string, { name: string; price: number }>>({});
+  const toast = useToast();
+  const { setSelectedImage } = useProductVariationImage();
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, { name: string; price: number; image_path?: string | null }>>({});
   const [session, setSession] = useState(0);
   const [qty, setQty] = useState(1);
   const [attendeeFor, setAttendeeFor] = useState<'self' | 'others'>('self');
-  const [attendeeNames, setAttendeeNames] = useState<string[]>(['']);
+  const [attendeeNames, setAttendeeNames] = useState<string[]>([]);
+  const [attendeeDraft, setAttendeeDraft] = useState<string[]>([]);
+  const [attendeeNamesConfirmed, setAttendeeNamesConfirmed] = useState(false);
+  const [attendeeDialogOpen, setAttendeeDialogOpen] = useState(false);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
-  const toast = useToast();
 
   const variations = product.variations_data ?? [];
+  const grouped = variations.reduce<Record<string, typeof variations>>((groups, variation) => {
+    (groups[variation.typeLabel] ??= []).push(variation);
+    return groups;
+  }, {});
+  const hasVariations = Object.keys(grouped).length > 0;
   const tutorialDetails = product.tutorial_details;
+  const workshopPrice = Number(product.tutorial_price ?? 0);
+  const currentVariantPrice = view === 'product'
+    ? Object.values(selectedVariants).reduce((total, variant) => total + (variant.price || 0), 0)
+    : 0;
+  const productPrice = Number(product.price) + currentVariantPrice;
+  const formattedVariant = view === 'product'
+    ? Object.entries(selectedVariants).map(([type, variant]) => `${type}: ${variant.name}`).join(' · ')
+    : '';
   const maximumWorkshopCapacity = product.tutorial_capacity ?? 10;
   const sessionCapacity = (index: number) => Math.min(
     maximumWorkshopCapacity,
     product.tutorial_dates?.[index]?.available_slots ?? maximumWorkshopCapacity
   );
   const selectedSessionCapacity = sessionCapacity(session);
+  const selectedSessionIsFull = (product.tutorial_dates?.[session]?.available_slots ?? 1) <= 0;
+  const selectedTutorialDate = product.tutorial_dates?.[session];
+  const workshopImage = product.tutorial_gallery?.find((image) => image.trim()) ?? product.image_path;
+  const workshopVenue = product.tutorial_dates?.[session]
+    ? sessionVenue(product.tutorial_dates[session], product.tutorial_location)
+    : product.tutorial_location || 'Venue details will be shared by the artisan';
+  const selectedVenueLat = selectedTutorialDate?.lat ? Number(selectedTutorialDate.lat) : product.tutorial_lat;
+  const selectedVenueLng = selectedTutorialDate?.lng ? Number(selectedTutorialDate.lng) : product.tutorial_lng;
+
+  useEffect(() => {
+    if (view !== 'workshop') return;
+
+    const hash = window.location.hash;
+    if (!hash.startsWith('#session-')) return;
+    const selectedIndex = Number.parseInt(hash.slice('#session-'.length), 10);
+    if (Number.isInteger(selectedIndex) && selectedIndex >= 0 && selectedIndex < (product.tutorial_dates?.length ?? 0)) {
+      setSession(selectedIndex);
+    }
+  }, [product.tutorial_dates?.length, view]);
+
+  function toggleVariation(typeLabel: string, name: string, price: number, imagePath?: string | null) {
+    const next = { ...selectedVariants };
+    if (next[typeLabel]?.name === name) delete next[typeLabel];
+    else next[typeLabel] = { name, price, image_path: imagePath };
+    setSelectedVariants(next);
+    setSelectedImage(
+      next[typeLabel]?.image_path
+        ?? Object.values(next).find((variant) => variant.image_path)?.image_path
+        ?? null
+    );
+  }
+
+  function openAttendeeDialog(names = attendeeNames) {
+    setAttendeeDraft(Array.from({ length: qty }, (_, index) => names[index] ?? ''));
+    setAttendeeDialogOpen(true);
+  }
+
+  function handleQtyChange(nextQty: number) {
+    const maxQty = view === 'product'
+      ? Math.max(1, product.stock_quantity)
+      : Math.max(1, selectedSessionCapacity);
+    const validQty = Math.min(maxQty, Math.max(1, nextQty));
+    setQty(validQty);
+    setAttendeeNames((previous) => Array.from(
+      { length: validQty },
+      (_, index) => previous[index] ?? ''
+    ));
+
+    if (view === 'workshop' && attendeeFor === 'others') {
+      setAttendeeNamesConfirmed(false);
+      setAttendeeDraft((previous) => Array.from(
+        { length: validQty },
+        (_, index) => previous[index] ?? attendeeNames[index] ?? ''
+      ));
+      setAttendeeDialogOpen(true);
+    }
+  }
+
   function selectSession(index: number) {
     setSession(index);
-    setQty((current) => Math.min(current, Math.max(1, sessionCapacity(index))));
-  }
-
-  const grouped = variations.reduce<Record<string, typeof variations>>((acc, v) => {
-    (acc[v.typeLabel] ??= []).push(v);
-    return acc;
-  }, {});
-
-  // Listen to hash triggers (e.g. #workshop-booking or #session-0) to seamlessly switch mode and session
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    function handleHash() {
-      const hash = window.location.hash;
-      if (hash.includes('workshop')) {
-        setMode('workshop');
-      } else if (hash.startsWith('#session-')) {
-        const idx = parseInt(hash.replace('#session-', ''), 10);
-        if (!isNaN(idx)) {
-          setMode('workshop');
-          setSession(idx);
-        }
-      }
-    }
-
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
-
-  function toggleVariation(typeLabel: string, name: string, price: number) {
-    setSelectedVariants((prev) => {
-      const next = { ...prev };
-      if (next[typeLabel]?.name === name) {
-        delete next[typeLabel];
-      } else {
-        next[typeLabel] = { name, price };
-      }
-      return next;
-    });
-  }
-
-  function handleQtyChange(newQty: number) {
-    const validQty = Math.max(1, newQty);
+    const validQty = Math.min(qty, Math.max(1, sessionCapacity(index)));
     setQty(validQty);
-    setAttendeeNames((prev) => {
-      const next = [...prev];
-      while (next.length < validQty) next.push('');
-      return next.slice(0, validQty);
-    });
+    setAttendeeNames((previous) => previous.slice(0, validQty));
+    if (attendeeFor === 'others') setAttendeeNamesConfirmed(false);
   }
 
-  function updateAttendeeName(index: number, name: string) {
-    setAttendeeNames((prev) => {
-      const next = [...prev];
-      next[index] = name;
-      return next;
-    });
+  function chooseAttendee(value: 'self' | 'others') {
+    setAttendeeFor(value);
+    if (value === 'self') {
+      setAttendeeNamesConfirmed(true);
+      setAttendeeDialogOpen(false);
+      return;
+    }
+    setAttendeeNamesConfirmed(false);
+    openAttendeeDialog();
   }
 
-  const currentVariantPrice = Object.values(selectedVariants).reduce((sum, v) => sum + (v.price || 0), 0);
-  const formattedVariant = Object.entries(selectedVariants)
-    .map(([type, v]) => `${type}: ${v.name}`)
-    .join(' · ');
+  function saveAttendeeNames() {
+    const names = attendeeDraft.slice(0, qty).map((name) => name.trim());
+    if (names.length !== qty || names.some((name) => !name)) {
+      setMsg(`Enter the full name for each of the ${qty} attendee${qty === 1 ? '' : 's'}.`);
+      return;
+    }
+    setAttendeeNames(names);
+    setAttendeeNamesConfirmed(true);
+    setAttendeeDialogOpen(false);
+    setMsg('');
+  }
 
-  const productPrice = Number(product.price) + currentVariantPrice;
-  const workshopPrice = Number(product.tutorial_price ?? 0);
-  const bundleUnitPrice = productPrice + workshopPrice;
-
-  async function addToCart(purchaseType: 'product' | 'workshop' | 'bundle') {
+  async function addToCart(purchaseType: PurchaseType) {
     if (!loggedIn) {
       router.push(`/auth/login?next=/customer/browse/${product.id}`);
       return;
     }
 
-    if (purchaseType !== 'product' && attendeeFor === 'others') {
-      const missing = attendeeNames.slice(0, qty).some((n) => !n.trim());
-      if (missing) {
-        setMsg(`Please enter the full name for all ${qty} attendee slot${qty > 1 ? 's' : ''}.`);
+    if (purchaseType === 'workshop' && attendeeFor === 'others') {
+      const names = attendeeNames.slice(0, qty);
+      if (!attendeeNamesConfirmed || names.length !== qty || names.some((name) => !name.trim())) {
+        setMsg('');
+        openAttendeeDialog(attendeeNames);
         return;
       }
     }
 
     setBusy(true);
     setMsg('');
-    const attendeeString = purchaseType !== 'product' && attendeeFor === 'others'
-      ? attendeeNames.slice(0, qty).map((n) => n.trim()).filter(Boolean).join(', ')
+    const attendeeString = purchaseType === 'workshop' && attendeeFor === 'others'
+      ? attendeeNames.slice(0, qty).map((name) => name.trim()).join(', ')
       : null;
 
-    const res = await fetch('/api/cart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        product_id: product.id,
-        purchase_type: purchaseType,
-        quantity: qty,
-        selected_variant: purchaseType !== 'workshop' ? (formattedVariant || null) : null,
-        selected_session: purchaseType !== 'product' ? product.tutorial_dates?.[session] ?? null : null,
-        attendee_for: purchaseType !== 'product' ? attendeeFor : 'self',
-        attendee_name: attendeeString,
-      }),
-    });
-    const data = await res.json();
-    setBusy(false);
-    if (data.status === 'success') {
+    try {
+      const response = await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          purchase_type: purchaseType,
+          quantity: qty,
+          selected_variant: purchaseType === 'product' ? formattedVariant || null : null,
+          selected_session: purchaseType === 'workshop' ? product.tutorial_dates?.[session] ?? null : null,
+          attendee_for: purchaseType === 'workshop' ? attendeeFor : 'self',
+          attendee_name: attendeeString,
+        }),
+      });
+      const data = await response.json() as { status?: string; message?: string };
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || 'Could not add this item to your basket.');
+      }
+
       router.refresh();
-      const label =
-        purchaseType === 'bundle'
-          ? 'Craft & Workshop bundle added to cart!'
-          : purchaseType === 'workshop'
-          ? 'Workshop booking added to cart'
-          : 'Product added to cart';
-      toast.success(label, { label: 'View cart →', href: '/cart' });
-      setMsg('');
-    } else {
-      setMsg(data.message || 'Could not add to cart.');
+      const label = purchaseType === 'workshop'
+        ? 'Workshop added to your basket.'
+        : 'Craft added to your basket.';
+      toast.success(label, { label: 'View basket', href: '/cart' });
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : 'Could not add this item to your basket.');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -229,606 +280,546 @@ export default function ProductDetailClient({ product, loggedIn }: { product: Pr
       router.push(`/auth/login?next=/customer/browse/${product.id}`);
       return;
     }
+
     setBusy(true);
     setMsg('');
-    const res = await fetch('/api/chat/open', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id }),
-    });
-    const data = await res.json();
-    setBusy(false);
-    if (data.status === 'success') router.push(`/customer/account/messages?c=${data.conversation_id}`);
-    else setMsg(data.message || 'Please sign in as a customer to chat.');
+    try {
+      const response = await fetch('/api/chat/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id }),
+      });
+      const data = await response.json() as { status?: string; message?: string; conversation_id?: number };
+      if (!response.ok || data.status !== 'success' || !data.conversation_id) {
+        throw new Error(data.message || 'Could not open a conversation with the artisan.');
+      }
+      router.push(`/customer/account/messages?c=${data.conversation_id}`);
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : 'Could not open a conversation with the artisan.');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const hasVariations = Object.entries(grouped).length > 0;
+  function renderVariations() {
+    return (
+      <div className="space-y-3">
+        {Object.entries(grouped).map(([label, options]) => (
+          <fieldset key={label}>
+            <legend className="mb-1.5 text-xs font-bold text-charcoal-800">{label}</legend>
+            <div className="flex flex-wrap gap-2">
+              {options.map((option) => {
+                const isSelected = selectedVariants[label]?.name === option.name;
+                return (
+                  <button
+                    key={option.name}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => toggleVariation(option.typeLabel, option.name, Number(option.price) || 0, option.image_path)}
+                    className={`min-h-9 rounded-lg border px-3 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crimson-600 ${
+                      isSelected
+                        ? 'border-crimson-700 bg-crimson-700 text-white'
+                        : 'border-abaca-300 bg-white text-charcoal-800 hover:border-ochre-500 hover:bg-ochre-50'
+                    }`}
+                  >
+                    {option.name}{Number(option.price) > 0 ? ` (+₱${Number(option.price).toFixed(2)})` : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+    );
+  }
+
+  if (view === 'product') {
+    return (
+      <div className="mt-4 space-y-4">
+        {hasVariations ? renderVariations() : (
+          <p className="text-xs leading-5 text-charcoal-600">
+            Each piece is handcrafted by the artisan. Choose a quantity to add it to your basket.
+          </p>
+        )}
+
+        <QuantityStepper
+          value={qty}
+          max={Math.max(1, product.stock_quantity)}
+          label="Quantity"
+          onChange={handleQtyChange}
+          disabled={product.stock_quantity <= 0}
+        />
+
+        <button
+          type="button"
+          onClick={() => void addToCart('product')}
+          disabled={busy || product.stock_quantity <= 0}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-crimson-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-crimson-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crimson-700"
+        >
+          <PackageCheck size={17} aria-hidden="true" />
+          {busy ? 'Adding…' : `Add craft to basket · ₱${(productPrice * qty).toFixed(2)}`}
+        </button>
+
+        {msg && <p role="alert" className="text-sm font-semibold text-crimson-800">{msg}</p>}
+      </div>
+    );
+  }
 
   return (
-    <div id="workshop-booking" className="mt-6 scroll-mt-24 space-y-5">
-      {msg && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-crimson-800 shadow-2xs">
-          ⚠️ {msg}
-        </div>
-      )}
+    <section
+      id="workshop-booking"
+      className="relative min-w-0 scroll-mt-24 overflow-hidden rounded-2xl border border-abaca-200 border-t-2 border-t-ochre-500 bg-white shadow-sm"
+    >
+      <div className="space-y-4 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-[minmax(96px,0.7fr)_minmax(0,1.3fr)]">
+          <div className="relative min-h-28 overflow-hidden rounded-xl border border-abaca-200 bg-ochre-50 sm:min-h-32">
+            {workshopImage ? (
+              <>
+                <Image
+                  src={workshopImage}
+                  alt={`${product.tutorial_title || product.name} workshop`}
+                  fill
+                  sizes="(max-width: 640px) 100vw, 150px"
+                  className="object-cover"
+                />
+                <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold text-crimson-800 shadow-sm">
+                  Artisan-led
+                </span>
+              </>
+            ) : (
+              <div className="flex h-full min-h-28 items-center justify-center text-ochre-800 sm:min-h-32">
+                <Sparkles size={28} aria-hidden="true" />
+              </div>
+            )}
+          </div>
 
-      {/* Choice Selector: Order Product vs Book Cultural Experience vs Bundle */}
-      {product.has_tutorial && (
+          <div className="flex min-w-0 flex-col justify-center">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-crimson-700">
+                  <Sparkles size={14} aria-hidden="true" />
+                  Workshop available
+                </p>
+                <h2 className="mt-1 font-serif text-lg font-bold leading-tight text-charcoal-900">
+                  {product.tutorial_title || 'Cultural workshop'}
+                </h2>
+              </div>
+              <div className="shrink-0 rounded-xl bg-ochre-50 px-2.5 py-1.5 text-right">
+                <p className="text-[10px] font-semibold text-charcoal-600">Per attendee</p>
+                <p className="text-lg font-bold text-crimson-700">
+                  {product.tutorial_fee_type === 'free' ? 'Free' : `₱${workshopPrice.toFixed(2)}`}
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-2 text-[11px] font-semibold text-ochre-900">
+              {selectedSessionIsFull
+                ? 'This session is fully booked'
+                : `${selectedTutorialDate?.available_slots ?? product.tutorial_capacity ?? 'Limited'} seats available`}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm leading-5 text-charcoal-600">
+          {product.tutorial_description || 'Join the artisan for a hands-on introduction to this living craft tradition.'}
+        </p>
+
+        {tutorialDetails?.participants_receive && (
+          <p className="rounded-xl border border-ochre-200 bg-ochre-50/70 px-3 py-2.5 text-xs leading-5 text-charcoal-700">
+            <strong className="text-charcoal-900">You’ll take home:</strong>{' '}
+            {tutorialDetails.participants_receive}
+          </p>
+        )}
+
+        {(tutorialDetails || product.tutorial_learnings?.length) && (
+          <div className="flex flex-wrap gap-2">
+            {tutorialDetails?.duration_minutes ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-2.5 py-1.5 text-xs font-semibold text-charcoal-700">
+                <Clock3 size={14} className="text-ochre-700" aria-hidden="true" />
+                {tutorialDetails.duration_minutes} min
+              </span>
+            ) : null}
+            {tutorialDetails?.skill_level && (
+              <span className="rounded-lg bg-canvas px-2.5 py-1.5 text-xs font-semibold text-charcoal-700">
+                {tutorialDetails.skill_level}
+              </span>
+            )}
+            {tutorialDetails?.languages?.length ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-canvas px-2.5 py-1.5 text-xs font-semibold text-charcoal-700">
+                <Languages size={14} className="text-ochre-700" aria-hidden="true" />
+                {tutorialDetails.languages.join(', ')}
+              </span>
+            ) : null}
+            {tutorialDetails?.category && (
+              <span className="rounded-lg bg-canvas px-2.5 py-1.5 text-xs font-semibold text-charcoal-700">
+                {tutorialDetails.category}
+              </span>
+            )}
+            {tutorialDetails?.materials_provided && (
+              <span className="rounded-lg bg-canvas px-2.5 py-1.5 text-xs font-semibold text-charcoal-700">
+                {tutorialDetails.materials_provided === 'all'
+                  ? 'Materials provided'
+                  : tutorialDetails.materials_provided === 'some'
+                    ? 'Some materials provided'
+                    : 'Bring your own materials'}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-wider text-charcoal-700">
-              Select Experience Option:
-            </label>
-            <span className="text-[11px] font-semibold text-ochre-800">
-              Live Workshop Available
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-2 bg-abaca-100/60 rounded-2xl border border-abaca-200/90 text-xs shadow-2xs">
-            {/* Option 1: Product Only */}
-            <button
-              type="button"
-              onClick={() => setMode('product')}
-              className={`flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-xl font-semibold transition text-center ${
-                mode === 'product'
-                  ? 'bg-white text-charcoal-900 shadow-sm border border-ochre-400 ring-2 ring-ochre-500/20'
-                  : 'text-charcoal-600 hover:text-charcoal-900 hover:bg-white/60'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-bold">
-                <span>📦</span>
-                <span>Order Craft</span>
-              </div>
-              <span className="text-[11px] font-medium text-stone-500">
-                ₱{productPrice.toFixed(2)}
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-bold text-charcoal-900">Session schedule</h3>
+            {product.tutorial_capacity && (
+              <span className="text-right text-xs text-charcoal-500">
+                Up to {product.tutorial_capacity} attendees
               </span>
-            </button>
-
-            {/* Option 2: Workshop Only */}
-            <button
-              type="button"
-              onClick={() => setMode('workshop')}
-              className={`flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-xl font-semibold transition text-center relative ${
-                mode === 'workshop'
-                  ? 'bg-white text-charcoal-900 shadow-sm border border-ochre-500 ring-2 ring-ochre-500/25'
-                  : 'text-charcoal-600 hover:text-charcoal-900 hover:bg-white/60'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-bold">
-                <span></span>
-                <span>Live Workshop</span>
-              </div>
-              <span className="text-[11px] font-bold text-ochre-800">
-                {product.tutorial_fee_type === 'free' ? 'FREE PASS' : `₱${workshopPrice.toFixed(2)}`}
-              </span>
-            </button>
-
-            {/* Option 3: Craft + Workshop Bundle */}
-            <button
-              type="button"
-              onClick={() => setMode('bundle')}
-              className={`flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-xl font-semibold transition text-center ${
-                mode === 'bundle'
-                  ? 'bg-white text-ochre-900 shadow-sm border border-ochre-400 ring-2 ring-ochre-500/25'
-                  : 'text-charcoal-600 hover:text-ochre-900 hover:bg-white/60'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-bold">
-                <span></span>
-                <span>Craft + Workshop</span>
-              </div>
-              <span className="text-[11px] font-bold text-ochre-700">
-                ₱{bundleUnitPrice.toFixed(2)}
-              </span>
-            </button>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* PANEL 1: Order Handcrafted Product Mode (Clean, no confusion for products without variants like Product 31) */}
-      {mode === 'product' && (
-        <div className="space-y-5 rounded-2xl border border-abaca-200/90 bg-white p-5 shadow-xs">
-          {hasVariations ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-abaca-100 pb-2.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-charcoal-800">
-                  Select Variations & Customization
+          {product.tutorial_dates?.length ? product.tutorial_dates.length > 1 ? (
+            <details className="rounded-xl border border-abaca-200 bg-white">
+              <summary className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-xs text-charcoal-800">
+                <span className="min-w-0">
+                  <span className="block font-bold">
+                    Selected: {formatSessionDate(selectedTutorialDate?.date ?? '')}
+                    {selectedTutorialDate && ` · ${selectedTutorialDate.time_start}–${selectedTutorialDate.time_end}`}
+                  </span>
+                  {selectedTutorialDate && (
+                    <span className="mt-0.5 block truncate text-charcoal-500">{workshopVenue}</span>
+                  )}
+                  {selectedTutorialDate?.registration_deadline && (
+                    <span className="mt-0.5 block text-charcoal-500">
+                      Book by {formatSessionDate(selectedTutorialDate.registration_deadline)}
+                    </span>
+                  )}
                 </span>
-                <span className="text-xs text-stone-500 font-medium">
-                  {product.stock_quantity > 0 ? `${product.stock_quantity} available` : 'Made to order'}
+                <span className="shrink-0 font-semibold text-crimson-700">
+                  Change · {product.tutorial_dates.length}
                 </span>
-              </div>
-
-              {Object.entries(grouped).map(([label, opts]) => (
-                <div key={label}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-charcoal-800">{label}</label>
-                    {selectedVariants[label] && (
-                      <span className="text-[11px] text-ochre-700 font-semibold">
-                        Selected: {selectedVariants[label].name}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {opts.map((v) => {
-                      const isSelected = selectedVariants[label]?.name === v.name;
-                      return (
-                        <button
-                          key={v.name}
-                          type="button"
-                          onClick={() => toggleVariation(v.typeLabel, v.name, Number(v.price) || 0)}
-                          className={`rounded-xl border px-3.5 py-1.5 text-xs font-semibold transition ${
-                            isSelected
-                              ? 'border-ochre-700 bg-ochre-700 text-white shadow-xs'
-                              : 'border-abaca-300 bg-white text-charcoal-800 hover:border-ochre-500'
-                          }`}
-                        >
-                          {v.name} {Number(v.price) > 0 ? `(+₱${v.price})` : ''}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="border-b border-abaca-100 pb-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-charcoal-800">
-                  Purchase Order Details
-                </span>
-                <span className="rounded-full bg-ochre-50 px-2.5 py-0.5 text-[10px] font-bold text-ochre-800 border border-ochre-200">
-                  Ready to Dispatch
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-stone-500">
-                Direct handcrafted artisan piece. Authentic cultural heritage craft.
-              </p>
-            </div>
-          )}
-
-          {/* Quantity Stepper: Solves input confusion and prevents stretching */}
-          <QuantityStepper
-            value={qty}
-            min={1}
-            max={Math.max(1, product.stock_quantity)}
-            onChange={handleQtyChange}
-            label="Order Quantity"
-            stockLabel={
-              product.stock_quantity > 0
-                ? `${product.stock_quantity} pieces available in artisan atelier`
-                : 'Made to order by master artisan'
-            }
-          />
-
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-            <button
-              type="button"
-              className="btn-primary flex-1 py-3.5 text-xs font-bold uppercase tracking-wider shadow-md rounded-xl"
-              disabled={busy || product.stock_quantity <= 0}
-              onClick={() => addToCart('product')}
-            >
-              🛒 Add Product to Cart — ₱{(productPrice * qty).toFixed(2)}
-            </button>
-            <button
-              type="button"
-              className="btn-outline px-4 py-3 text-xs font-semibold rounded-xl"
-              disabled={busy}
-              onClick={messageArtisan}
-              title="Chat with master custodian"
-            >
-              💬 Message
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* PANEL 2: Book Cultural Experience Mode (Visible workshop booking with prominent button) */}
-      {mode === 'workshop' && product.has_tutorial && (
-        <div className="space-y-5 rounded-2xl border-2 border-ochre-400 bg-ochre-50/25 p-5 shadow-xs">
-          <div className="flex items-center justify-between border-b border-ochre-200 pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🌿</span>
-                <p className="text-sm font-bold text-charcoal-900 font-sculpted">
-                  {product.tutorial_title || 'Living Cultural Workshop Session'}
-                </p>
-              </div>
-              <p className="text-xs text-stone-500 mt-0.5">
-                Hands-on masterclass in Agusan del Sur with Master Custodian
-              </p>
-            </div>
-            <span className="badge bg-charcoal-900 text-ochre-300 border border-ochre-500 font-bold py-1 px-2.5 text-xs">
-              {product.tutorial_fee_type === 'free' ? 'FREE PASS' : `₱${workshopPrice.toFixed(2)} / attendee`}
-            </span>
-          </div>
-
-          {tutorialDetails && (
-            <details className="rounded-xl border border-ochre-200 bg-white p-4">
-              <summary className="cursor-pointer text-sm font-bold text-brand-900">
-                Tutorial information, venue, and policies
               </summary>
-              <div className="mt-4 space-y-3 text-xs leading-5 text-stone-700">
-                <p>
-                  {tutorialDetails.category} · {tutorialDetails.skill_level} · {tutorialDetails.duration_minutes} minutes
-                </p>
-                <p>
-                  <strong>Participants:</strong> {tutorialDetails.minimum_participants
-                    ? `${tutorialDetails.minimum_participants}–${product.tutorial_capacity ?? 'unlimited'}`
-                    : `Up to ${product.tutorial_capacity ?? 'unlimited'}`}
-                </p>
-                {!!product.tutorial_learnings?.length && (
-                  <div>
-                    <strong>Learning outcomes:</strong>
-                    <ul className="ml-5 list-disc">
-                      {product.tutorial_learnings.map((outcome, index) => <li key={`${outcome}-${index}`}>{outcome}</li>)}
-                    </ul>
-                  </div>
-                )}
-                <p><strong>Languages:</strong> {tutorialDetails.languages.join(', ')}</p>
-                <p><strong>Materials:</strong> {{
-                  all: 'All materials provided',
-                  some: 'Some materials provided',
-                  bring_own: 'Participants bring their own',
-                }[tutorialDetails.materials_provided]}</p>
-                <p><strong>What to bring:</strong> {tutorialDetails.materials_requirements}</p>
-                <p><strong>Participants receive:</strong> {tutorialDetails.participants_receive}</p>
-                <p>
-                  <strong>Venue:</strong> {[
-                    tutorialDetails.venue_name,
-                    tutorialDetails.complete_address,
-                    tutorialDetails.barangay,
-                    tutorialDetails.municipality,
-                    tutorialDetails.province,
-                  ].filter(Boolean).join(', ')}
-                  {tutorialDetails.landmark && ` · Near ${tutorialDetails.landmark}`}
-                </p>
-                {tutorialDetails.fee_inclusion && <p><strong>Fee includes:</strong> {tutorialDetails.fee_inclusion}</p>}
-                {tutorialDetails.cancellation_policy && <p><strong>Cancellation:</strong> {tutorialDetails.cancellation_policy}</p>}
-                {tutorialDetails.refund_policy && <p><strong>Refunds:</strong> {tutorialDetails.refund_policy}</p>}
-                {tutorialDetails.attendance_instructions && <p><strong>Before attending:</strong> {tutorialDetails.attendance_instructions}</p>}
-                {tutorialDetails.additional_notes && <p><strong>Additional notes:</strong> {tutorialDetails.additional_notes}</p>}
+              <div className="max-h-56 space-y-2 overflow-y-auto border-t border-abaca-100 p-2.5">
+              {product.tutorial_dates.map((date, index) => {
+                const isSelected = session === index;
+                const isFull = (date.available_slots ?? 1) <= 0;
+                return (
+                  <label
+                    key={`${date.date}-${date.time_start}-${index}`}
+                    className={`block cursor-pointer rounded-lg border p-2.5 transition ${
+                      isSelected
+                        ? 'border-ochre-500 bg-ochre-50/60 ring-1 ring-ochre-500/30'
+                        : 'border-abaca-200 bg-white hover:border-ochre-400'
+                    } ${isFull ? 'opacity-60' : ''}`}
+                  >
+                    <span className="flex items-start gap-2.5">
+                      <input
+                        type="radio"
+                        name={`workshop-session-${product.id}`}
+                        checked={isSelected}
+                        disabled={isFull}
+                        onChange={() => selectSession(index)}
+                        className="mt-1 accent-crimson-700"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <time dateTime={date.date} className="block text-sm font-bold text-charcoal-900">
+                          {formatSessionDate(date.date)}
+                        </time>
+                        <span className="mt-0.5 flex items-center gap-1.5 text-xs text-charcoal-600">
+                          <Clock3 size={13} aria-hidden="true" />
+                          {date.time_start} – {date.time_end}
+                        </span>
+                        <span className="mt-1 flex items-start gap-1.5 text-xs leading-5 text-charcoal-600">
+                          <MapPin size={13} className="mt-1 shrink-0" aria-hidden="true" />
+                          <span>{sessionVenue(date, product.tutorial_location)}</span>
+                        </span>
+                        <span className="mt-1 block text-xs font-semibold text-ochre-900">
+                          {isFull
+                            ? 'Fully booked'
+                            : `${date.available_slots ?? product.tutorial_capacity ?? 'Limited'} seats available`}
+                          {date.registration_deadline && ` · Book by ${date.registration_deadline}`}
+                        </span>
+                      </span>
+                      {isSelected && <CheckCircle2 size={17} className="shrink-0 text-crimson-700" aria-label="Selected" />}
+                    </span>
+                  </label>
+                );
+              })}
               </div>
             </details>
-          )}
-
-          {/* Session Date Selection */}
-          {product.tutorial_dates && product.tutorial_dates.length > 0 ? (
-            <div className="space-y-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-charcoal-800">
-                1. Select Scheduled Session Date & Time:
-              </label>
-              <div className="space-y-2">
-                {product.tutorial_dates.map((d, i) => (
-                  <label
-                    key={i}
-                    className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer text-xs transition ${
-                      session === i
-                        ? 'border-ochre-500 bg-white ring-2 ring-ochre-500/20 shadow-xs'
-                        : 'border-abaca-200 bg-white/70 hover:bg-white'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="session"
-                      className="mt-1 accent-crimson-600"
-                      checked={session === i}
-                      onChange={() => selectSession(i)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-charcoal-900 text-sm">📅 {d.date}</p>
-                      <p className="text-stone-600 font-medium mt-0.5">🕒 {d.time_start} – {d.time_end}</p>
-                      {d.location && <p className="text-stone-500 text-[11px] mt-0.5 truncate">📍 {d.location}</p>}
-                      {d.available_slots != null && (
-                        <p className="text-stone-500 text-[11px] mt-0.5">
-                          {d.available_slots} available slots
-                          {d.registration_deadline && ` · Book by ${d.registration_deadline}`}
-                        </p>
-                      )}
-                    </div>
-                    {session === i && (
-                      <span className="text-[10px] font-bold text-ochre-900 bg-ochre-100 px-2 py-0.5 rounded border border-ochre-300">
-                        Selected
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
-            </div>
           ) : (
-            <p className="text-xs text-stone-500 italic bg-white p-3 rounded-xl border border-abaca-200">
-              Artisan has not scheduled specific public calendar dates yet. Message the artisan below to coordinate an atelier workshop session.
+            <p className="rounded-xl border border-abaca-200 bg-canvas px-3 py-2.5 text-xs text-charcoal-600">
+              One session is scheduled.
+            </p>
+          ) : (
+            <p className="rounded-xl border border-abaca-200 bg-canvas p-3 text-sm leading-5 text-charcoal-600">
+              No public session dates are scheduled yet. Message the artisan to arrange a time.
             </p>
           )}
+          {selectedTutorialDate && (
+            <section className="rounded-xl border border-abaca-200 bg-white p-3">
+              <div className="mb-3 flex items-start gap-2">
+                <MapPin size={16} className="mt-0.5 shrink-0 text-crimson-700" aria-hidden="true" />
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-charcoal-900">Workshop venue and directions</h4>
+                  <p className="mt-1 text-xs leading-5 text-charcoal-600">{workshopVenue}</p>
+                </div>
+              </div>
+              <div className="h-52 overflow-hidden rounded-lg border border-abaca-200">
+                <ExperienceMap
+                  lat={Number.isFinite(selectedVenueLat) ? selectedVenueLat : null}
+                  lng={Number.isFinite(selectedVenueLng) ? selectedVenueLng : null}
+                  locationName={workshopVenue}
+                  artisanPhone={artisanPhone}
+                  compact
+                />
+              </div>
+            </section>
+          )}
+        </div>
 
-          {/* Attendee Slots Stepper */}
+        {(tutorialDetails || product.tutorial_learnings?.length || product.tutorial_things_to_bring) && (
+          <details className="rounded-xl border border-abaca-200 bg-white">
+            <summary className="cursor-pointer px-3 py-2.5 text-sm font-bold text-charcoal-800">
+              What’s included and what you’ll learn
+            </summary>
+            <div className="space-y-2 border-t border-abaca-100 px-3 py-3 text-xs leading-5 text-charcoal-700">
+              {product.tutorial_learnings?.length ? (
+                <div>
+                  <p className="font-bold">You’ll learn</p>
+                  <ul className="ml-4 list-disc">
+                    {product.tutorial_learnings.map((learning, index) => (
+                      <li key={`${learning}-${index}`}>{learning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {tutorialDetails?.materials_provided && (
+                <p>
+                  <strong>Materials:</strong>{' '}
+                  {tutorialDetails.materials_provided === 'all'
+                    ? 'All materials provided'
+                    : tutorialDetails.materials_provided === 'some'
+                      ? 'Some materials provided'
+                      : 'Bring your own materials'}
+                </p>
+              )}
+              {tutorialDetails?.materials_requirements && (
+                <p><strong>Bring:</strong> {tutorialDetails.materials_requirements}</p>
+              )}
+              {tutorialDetails?.participants_receive && (
+                <p><strong>You’ll receive:</strong> {tutorialDetails.participants_receive}</p>
+              )}
+              {tutorialDetails?.fee_inclusion && (
+                <p><strong>Fee includes:</strong> {tutorialDetails.fee_inclusion}</p>
+              )}
+              {product.tutorial_things_to_bring && (
+                <p><strong>Things to bring:</strong> {product.tutorial_things_to_bring}</p>
+              )}
+              {tutorialDetails?.attendance_instructions && (
+                <p><strong>Before attending:</strong> {tutorialDetails.attendance_instructions}</p>
+              )}
+              {tutorialDetails?.cancellation_policy && (
+                <p><strong>Cancellation:</strong> {tutorialDetails.cancellation_policy}</p>
+              )}
+              {tutorialDetails?.refund_policy && (
+                <p><strong>Refunds:</strong> {tutorialDetails.refund_policy}</p>
+              )}
+              {tutorialDetails?.additional_notes && <p>{tutorialDetails.additional_notes}</p>}
+            </div>
+          </details>
+        )}
+
+        <div className="space-y-2.5">
           <QuantityStepper
             value={qty}
-            min={1}
-            max={selectedSessionCapacity}
+            max={Math.max(1, selectedSessionCapacity)}
+            label="Attendee quantity"
             onChange={handleQtyChange}
-            label="Attendee Seats"
-            stockLabel={`Maximum ${selectedSessionCapacity} attendees allowed for this session`}
+            disabled={selectedSessionIsFull}
           />
 
-          {/* Attendee Details: For Self vs Others */}
-          <div className="rounded-xl bg-white p-4 border border-abaca-200 space-y-3">
-            <label className="text-xs font-bold uppercase tracking-wider text-charcoal-800 block">
-              2. Who is this workshop booking for?
-            </label>
-            <div className="grid grid-cols-2 gap-2.5 text-xs">
-              <label
-                className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition ${
-                  attendeeFor === 'self'
-                    ? 'border-crimson-600 bg-crimson-50/80 font-bold text-crimson-900 ring-1 ring-crimson-500'
-                    : 'border-abaca-200 text-charcoal-700 hover:bg-stone-50'
-                }`}
-              >
+          <fieldset>
+            <legend className="mb-2 text-sm font-bold text-charcoal-900">Who is this booking for?</legend>
+            <div className="grid grid-cols-2 gap-2">
+              <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border px-2 text-xs font-semibold transition ${
+                attendeeFor === 'self'
+                  ? 'border-crimson-600 bg-crimson-50 text-crimson-900'
+                  : 'border-abaca-300 bg-white text-charcoal-700 hover:bg-canvas'
+              }`}>
                 <input
                   type="radio"
-                  name="attendee_for"
-                  className="accent-crimson-600"
+                  name={`attendee-for-${product.id}`}
                   checked={attendeeFor === 'self'}
-                  onChange={() => setAttendeeFor('self')}
+                  onChange={() => chooseAttendee('self')}
+                  className="accent-crimson-700"
                 />
-                <span>👤 For Myself</span>
+                For myself
               </label>
-
-              <label
-                className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition ${
-                  attendeeFor === 'others'
-                    ? 'border-crimson-600 bg-crimson-50/80 font-bold text-crimson-900 ring-1 ring-crimson-500'
-                    : 'border-abaca-200 text-charcoal-700 hover:bg-stone-50'
-                }`}
-              >
+              <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border px-2 text-xs font-semibold transition ${
+                attendeeFor === 'others'
+                  ? 'border-crimson-600 bg-crimson-50 text-crimson-900'
+                  : 'border-abaca-300 bg-white text-charcoal-700 hover:bg-canvas'
+              }`}>
                 <input
                   type="radio"
-                  name="attendee_for"
-                  className="accent-crimson-600"
+                  name={`attendee-for-${product.id}`}
                   checked={attendeeFor === 'others'}
-                  onChange={() => setAttendeeFor('others')}
+                  onChange={() => chooseAttendee('others')}
+                  className="accent-crimson-700"
                 />
-                <span>👥 For Someone Else</span>
+                Someone else
               </label>
             </div>
+          </fieldset>
 
-            {attendeeFor === 'others' && (
-              <div className="space-y-2.5 pt-2 border-t border-abaca-100">
-                <p className="text-[11px] text-stone-500">
-                  Please provide attendee names so the artisan and workshop host can issue tickets.
-                </p>
-                {Array.from({ length: qty }).map((_, idx) => (
-                  <div key={idx}>
-                    <label className="block text-[11px] font-semibold text-charcoal-700 mb-1">
-                      Attendee {qty > 1 ? `#${idx + 1} ` : ''}Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      className="input w-full text-xs"
-                      placeholder={`e.g. Maria Santos${qty > 1 ? ` (Attendee ${idx + 1})` : ''}`}
-                      value={attendeeNames[idx] || ''}
-                      onChange={(e) => updateAttendeeName(idx, e.target.value)}
-                      required
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* HIGHLY VISIBLE WORKSHOP BOOKING BUTTON */}
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          {attendeeFor === 'others' && (
             <button
               type="button"
-              className="btn bg-crimson-600 hover:bg-crimson-700 text-white flex-1 py-3.5 text-xs font-bold uppercase tracking-wider shadow-md rounded-xl transition flex items-center justify-center gap-2"
-              disabled={busy}
-              onClick={() => addToCart('workshop')}
+              onClick={() => openAttendeeDialog()}
+              className="w-full rounded-lg border border-dashed border-ochre-500 bg-ochre-50/60 px-3 py-2 text-left text-xs font-semibold text-ochre-900 transition hover:bg-ochre-50"
             >
-              <span></span>
-              <span>
-                {product.tutorial_fee_type === 'free'
-                  ? `Confirm Free Workshop Registration (${qty} seat${qty > 1 ? 's' : ''})`
-                  : `Book Workshop Session — ₱${(workshopPrice * qty).toFixed(2)}`}
-              </span>
+              {attendeeNamesConfirmed
+                ? `Attendees: ${attendeeNames.slice(0, qty).join(', ')} · Edit`
+                : 'Add attendee names'}
             </button>
-            <button
-              type="button"
-              className="btn-outline px-4 py-3 text-xs font-semibold rounded-xl"
-              disabled={busy}
-              onClick={messageArtisan}
-            >
-              💬 Message
-            </button>
-          </div>
+          )}
         </div>
-      )}
 
-      {/* PANEL 3: Combined Craft + Workshop Bundle Mode */}
-      {mode === 'bundle' && product.has_tutorial && (
-        <div className="space-y-5 rounded-2xl border-2 border-ochre-300 bg-ochre-50/20 p-5 shadow-xs">
-          <div className="flex items-center justify-between border-b border-ochre-200 pb-3">
-            <div>
-              <p className="text-sm font-bold text-ochre-900 flex items-center gap-1.5 font-sculpted">
-                <span></span> Complete Cultural Heritage Bundle
-              </p>
-              <p className="text-xs text-stone-600 mt-0.5">
-                Receive the authentic craft item AND attend the masterclass workshop.
-              </p>
+        {msg && <p role="alert" className="rounded-lg bg-crimson-50 px-3 py-2 text-sm font-semibold text-crimson-800">{msg}</p>}
+
+        <button
+          type="button"
+          onClick={() => void addToCart('workshop')}
+          disabled={busy || selectedSessionIsFull}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-crimson-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-crimson-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-crimson-700"
+        >
+          <CalendarDays size={17} aria-hidden="true" />
+          {busy
+            ? 'Adding…'
+            : product.tutorial_fee_type === 'free'
+              ? `Reserve ${qty} free seat${qty === 1 ? '' : 's'}`
+              : `Add workshop to basket · ₱${(workshopPrice * qty).toFixed(2)}`}
+        </button>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-abaca-100 pt-3">
+          <Link
+            href={`/customer/account/report?type=experience&id=${product.id}`}
+            className="inline-flex min-h-9 items-center rounded-lg px-2 text-xs font-semibold text-crimson-700 transition hover:bg-crimson-50"
+          >
+            Report this workshop
+          </Link>
+          <button
+            type="button"
+            onClick={() => void messageArtisan()}
+            disabled={busy}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-charcoal-600 transition hover:bg-canvas hover:text-crimson-700 disabled:opacity-50"
+          >
+            <MessageCircle size={15} aria-hidden="true" />
+            Message artisan
+          </button>
+        </div>
+
+        {!loggedIn && (
+          <p className="text-xs leading-5 text-charcoal-500">
+            You’ll be asked to sign in or create a customer account when booking.
+          </p>
+        )}
+      </div>
+
+      {attendeeDialogOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-charcoal-950/60 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setAttendeeDialogOpen(false);
+              if (!attendeeNamesConfirmed) setAttendeeFor('self');
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`attendee-dialog-title-${product.id}`}
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-abaca-200 bg-white p-5 shadow-2xl sm:p-6"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-ochre-800">
+                  <UsersRound size={15} aria-hidden="true" />
+                  Workshop attendees
+                </p>
+                <h2 id={`attendee-dialog-title-${product.id}`} className="mt-1 font-serif text-xl font-bold text-charcoal-900">
+                  Who should we book?
+                </h2>
+                <p className="mt-1 text-sm leading-5 text-charcoal-600">
+                  Enter the full name for each of the {qty} attendee{qty === 1 ? '' : 's'}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAttendeeDialogOpen(false);
+                  if (!attendeeNamesConfirmed) setAttendeeFor('self');
+                }}
+                aria-label="Close attendee details"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-charcoal-600 transition hover:bg-canvas"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
             </div>
-            <span className="badge bg-ochre-600 text-white font-bold py-1 px-2.5 text-xs">
-              ₱{bundleUnitPrice.toFixed(2)} / bundle
-            </span>
-          </div>
 
-          {/* 1. Craft Variant Section (if any) */}
-          {hasVariations && (
-            <div className="rounded-xl bg-white p-4 border border-abaca-200 space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-charcoal-800 block">
-                1. Select Handcrafted Variation:
-              </span>
-              {Object.entries(grouped).map(([label, opts]) => (
-                <div key={label}>
-                  <label className="block text-xs font-semibold text-charcoal-800 mb-1">{label}</label>
-                  <div className="flex flex-wrap gap-2">
-                    {opts.map((v) => {
-                      const isSelected = selectedVariants[label]?.name === v.name;
-                      return (
-                        <button
-                          key={v.name}
-                          type="button"
-                          onClick={() => toggleVariation(v.typeLabel, v.name, Number(v.price) || 0)}
-                          className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                            isSelected
-                              ? 'border-crimson-600 bg-crimson-600 text-white shadow-xs'
-                              : 'border-abaca-300 bg-white text-charcoal-800 hover:border-ochre-500'
-                          }`}
-                        >
-                          {v.name} {Number(v.price) > 0 ? `(+₱${v.price})` : ''}
-                        </button>
-                      );
-                    })}
-                  </div>
+            <div className="mt-5 space-y-3">
+              {Array.from({ length: qty }, (_, index) => (
+                <div key={index}>
+                  <label
+                    htmlFor={`attendee-name-${product.id}-${index}`}
+                    className="mb-1.5 block text-sm font-semibold text-charcoal-800"
+                  >
+                    {qty > 1 ? `Attendee ${index + 1} full name` : 'Attendee full name'}
+                  </label>
+                  <input
+                    id={`attendee-name-${product.id}-${index}`}
+                    type="text"
+                    autoComplete="name"
+                    maxLength={100}
+                    value={attendeeDraft[index] ?? ''}
+                    onChange={(event) => {
+                      const { value } = event.target;
+                      setAttendeeDraft((previous) => {
+                        const next = [...previous];
+                        next[index] = value;
+                        return next;
+                      });
+                      setMsg('');
+                    }}
+                    placeholder="Enter full name"
+                    className="input min-h-11"
+                  />
                 </div>
               ))}
             </div>
-          )}
 
-          {/* 2. Workshop Session Selection */}
-          <div className="rounded-xl bg-white p-4 border border-abaca-200 space-y-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-charcoal-800 block">
-              2. Select Scheduled Workshop Session:
-            </span>
-            {product.tutorial_dates && product.tutorial_dates.length > 0 ? (
-              <div className="space-y-2">
-                {product.tutorial_dates.map((d, i) => (
-                  <label
-                    key={i}
-                    className={`flex items-start gap-3 rounded-xl border p-2.5 cursor-pointer text-xs transition ${
-                      session === i
-                        ? 'border-ochre-600 bg-ochre-50/50 ring-2 ring-ochre-500/20 shadow-xs'
-                        : 'border-abaca-200 bg-white hover:bg-stone-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="bundle_session"
-                      className="mt-1 accent-ochre-600"
-                      checked={session === i}
-                      onChange={() => selectSession(i)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-charcoal-900">📅 {d.date}</p>
-                      <p className="text-stone-500">🕒 {d.time_start} – {d.time_end}</p>
-                      {d.location && <p className="text-stone-500 text-[11px] truncate">📍 {d.location}</p>}
-                    </div>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-stone-500 italic">No scheduled dates yet. Message artisan to arrange.</p>
-            )}
-          </div>
-
-          {/* 3. Attendee Booking Details */}
-          <div className="rounded-xl bg-white p-4 border border-abaca-200 space-y-3">
-            <label className="text-xs font-bold uppercase tracking-wider text-charcoal-800 block">
-              3. Who is this workshop session for?
-            </label>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <label
-                className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition ${
-                  attendeeFor === 'self'
-                    ? 'border-ochre-600 bg-ochre-50/70 font-bold text-ochre-900 ring-1 ring-ochre-500'
-                    : 'border-abaca-200 text-charcoal-700 hover:bg-stone-50'
-                }`}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setAttendeeDialogOpen(false);
+                  if (!attendeeNamesConfirmed) setAttendeeFor('self');
+                }}
+                className="min-h-11 rounded-xl border border-abaca-300 px-4 text-sm font-semibold text-charcoal-700 transition hover:bg-canvas"
               >
-                <input
-                  type="radio"
-                  name="bundle_attendee_for"
-                  className="accent-ochre-600"
-                  checked={attendeeFor === 'self'}
-                  onChange={() => setAttendeeFor('self')}
-                />
-                <span>👤 For Myself</span>
-              </label>
-
-              <label
-                className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition ${
-                  attendeeFor === 'others'
-                    ? 'border-ochre-600 bg-ochre-50/70 font-bold text-ochre-900 ring-1 ring-ochre-500'
-                    : 'border-abaca-200 text-charcoal-700 hover:bg-stone-50'
-                }`}
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveAttendeeNames}
+                className="min-h-11 rounded-xl bg-crimson-700 px-4 text-sm font-bold text-white transition hover:bg-crimson-800"
               >
-                <input
-                  type="radio"
-                  name="bundle_attendee_for"
-                  className="accent-ochre-600"
-                  checked={attendeeFor === 'others'}
-                  onChange={() => setAttendeeFor('others')}
-                />
-                <span>👥 For Someone Else</span>
-              </label>
+                Save attendee names
+              </button>
             </div>
-
-            {attendeeFor === 'others' && (
-              <div className="space-y-2 pt-2 border-t border-abaca-100">
-                <p className="text-[11px] text-stone-500">Enter attendee names for the workshop pass.</p>
-                {Array.from({ length: qty }).map((_, idx) => (
-                  <div key={idx}>
-                    <label className="block text-[11px] font-semibold text-charcoal-700 mb-1">
-                      Attendee {qty > 1 ? `#${idx + 1} ` : ''}Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      className="input w-full text-xs"
-                      placeholder={`e.g. Maria Santos${qty > 1 ? ` (Attendee ${idx + 1})` : ''}`}
-                      value={attendeeNames[idx] || ''}
-                      onChange={(e) => updateAttendeeName(idx, e.target.value)}
-                      required
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Stepper for Bundle Quantity */}
-          <QuantityStepper
-            value={qty}
-            min={1}
-            max={Math.min(Math.max(1, product.stock_quantity), selectedSessionCapacity)}
-            onChange={handleQtyChange}
-            label="Bundle Quantity / Seats"
-            stockLabel={`Limited to ${Math.min(product.stock_quantity, selectedSessionCapacity)} bundles`}
-          />
-
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-            <button
-              type="button"
-              className="btn bg-crimson-600 hover:bg-crimson-700 text-white flex-1 py-3.5 font-bold uppercase tracking-wider text-xs shadow-md rounded-xl transition"
-              disabled={busy || product.stock_quantity <= 0}
-              onClick={() => addToCart('bundle')}
-            >
-              Add Craft & Workshop to Cart — ₱{(bundleUnitPrice * qty).toFixed(2)}
-            </button>
-            <button
-              type="button"
-              className="btn-outline px-4 py-3 text-xs font-semibold rounded-xl"
-              disabled={busy}
-              onClick={messageArtisan}
-            >
-              💬 Message
-            </button>
-          </div>
+          </section>
         </div>
       )}
-
-      {!loggedIn && (
-        <div className="flex items-center gap-2 text-xs text-stone-600 bg-white p-3.5 rounded-xl border border-abaca-200 shadow-2xs">
-          <span>💡</span>
-          <span>You will be guided to sign in or register as a customer when booking or adding crafts to your basket.</span>
-        </div>
-      )}
-    </div>
+    </section>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useProductVariationImage } from './ProductVariationImageContext';
 
 export default function ProductGallery({
   main, gallery, name, hasTutorial,
@@ -11,9 +12,23 @@ export default function ProductGallery({
   name: string;
   hasTutorial: boolean;
 }) {
-  const images = [main, ...(gallery ?? [])].filter((x): x is string => Boolean(x));
+  const images = useMemo(
+    () => [main, ...(gallery ?? [])].filter((x): x is string => Boolean(x)),
+    [main, gallery]
+  );
   const [active, setActive] = useState(0);
+  const { selectedImage } = useProductVariationImage();
   const current = images[active] ?? null;
+
+  useEffect(() => {
+    if (!selectedImage) {
+      setActive(0);
+      return;
+    }
+
+    const selectedIndex = images.indexOf(selectedImage);
+    if (selectedIndex >= 0) setActive(selectedIndex);
+  }, [images, selectedImage]);
 
   if (images.length === 0) {
     return (

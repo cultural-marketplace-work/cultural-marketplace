@@ -130,6 +130,7 @@ export interface Variation {
   price: number;
   type: string;
   typeLabel: string;
+  image_path?: string | null;
 }
 
 export interface TutorialDate {

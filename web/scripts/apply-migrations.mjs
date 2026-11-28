@@ -25,6 +25,7 @@ const files = [
   '../supabase/migrations/0015_sync_identity_sequences.sql',
   '../supabase/migrations/0019_artisan_language_preferences.sql',
   '../supabase/migrations/0021_chat_message_replies.sql',
+  '../supabase/migrations/0022_tutorial_details.sql',
 ];
 
 let failed = false;

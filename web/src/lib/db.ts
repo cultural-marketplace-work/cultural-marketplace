@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { sql, tsString, parseJsonish } from './dbPg';
 import { cached, invalidate } from './cache';
 import { getDemoProfilePicture } from './demoProfilePictures';
+import { getDemoTutorialGallery, removeDemoTutorialGallery } from './demoTutorialImages';
 import { ARTISAN_CEB_TRANSLATIONS } from './artisanTranslations';
 import {
   seedUsers, seedArtisans, seedCategories, seedProducts,
@@ -523,7 +524,7 @@ export async function listAllProducts(): Promise<Product[]> {
 }
 
 export async function getProduct(id: number): Promise<Product | null> {
-  return cached(`product:${id}`, async () => {
+  const product = await cached(`product:${id}`, async () => {
     if (usingPostgres) {
       const rows = await sql`select * from products where id = ${id} limit 1`;
       return rows.length ? mapProduct(rows[0] as unknown as Record<string, unknown>) : null;
@@ -531,6 +532,10 @@ export async function getProduct(id: number): Promise<Product | null> {
     const p = store!.products.find((x) => x.id === id);
     return p ?? null;
   }, 30_000);
+  if (!product || usingPostgres) return product;
+
+  const tutorialGallery = await getDemoTutorialGallery(id);
+  return tutorialGallery ? { ...product, tutorial_gallery: tutorialGallery } : product;
 }
 
 export async function getProductByNfc(tagId: string): Promise<Product | null> {
@@ -597,10 +602,19 @@ export async function getUserPhone(userId: number): Promise<string | null> {
   return store!.users.find((u) => u.id === userId)?.phone ?? null;
 }
 
-/** Demo-mode helper: update product media columns in the in-memory store. */
-export function updateProductMediaDemo(productId: number, imagePath: string | null, gallery: string[] | null): void {
+/** Demo-mode helper: update product media and optional variation image data. */
+export function updateProductMediaDemo(
+  productId: number,
+  imagePath: string | null,
+  gallery: string[] | null,
+  variations?: Product['variations_data']
+): void {
   const p = store!.products.find((x) => x.id === productId);
-  if (p) { p.image_path = imagePath; p.product_gallery = gallery; }
+  if (p) {
+    p.image_path = imagePath;
+    p.product_gallery = gallery;
+    if (variations !== undefined) p.variations_data = variations;
+  }
 }
 
 export function updateTutorialMediaDemo(productId: number, gallery: string[] | null): void {
@@ -2057,7 +2071,9 @@ export async function adminDeleteProduct(id: number): Promise<{ ok: boolean; mes
   store!.products = store!.products.filter((x) => x.id !== id);
   store!.cart_items = store!.cart_items.filter((x) => x.product_id !== id);
   store!.chat_conversations.forEach((c) => { if (c.product_id === id) c.product_id = null; });
-  return store!.products.length < before ? { ok: true } : { ok: false, message: 'Product not found.' };
+  if (store!.products.length >= before) return { ok: false, message: 'Product not found.' };
+  await removeDemoTutorialGallery(id);
+  return { ok: true };
 }
 
 export interface ProductOrderSummary {
